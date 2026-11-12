@@ -1,6 +1,6 @@
 # CoNote – Real-Time Collaborative Workspace
 
-> **Project status: planning (Phase 0).** The architecture and documentation are complete for review; **no application code has been written and no feature below is implemented yet.** Everything described here is the *planned* design.
+> **Project status: Phase 1 (project setup and infrastructure) complete except the collaboration spike.** The monorepo, tooling, local infrastructure, health endpoints and CI exist. **No product feature (authentication, workspaces, editor, collaboration, comments, versions) is implemented yet**; everything under "Planned features" is the *plan*. Current status: `docs/HANDOVER.md`.
 
 CoNote is a collaborative workspace inspired by Notion and Figma. Multiple people will be able to edit the same rich-text page at the same time, see each other's cursors and presence, discuss content in comment threads, and browse or restore earlier versions, without losing concurrent changes.
 
@@ -52,7 +52,7 @@ flowchart LR
 - Documents are persisted as incremental Yjs updates, compacted periodically, with immutable snapshots for version history.
 - The project does not claim zero data loss or automatic reconvergence after Redis outages: persistence and recovery guarantees are explicitly defined and will be stated as verified only when their tests pass (`docs/ARCHITECTURE.md` §8).
 
-## Repository layout (planned)
+## Repository layout
 
 ```text
 conote/
@@ -65,28 +65,40 @@ conote/
 │   ├── shared/     # Zod schemas, types, permission logic
 │   └── editor/     # Tiptap extensions and Yjs binding
 ├── docs/           # Architecture and planning documents
-├── infra/          # Docker/Compose files (Phase 1)
+├── infra/          # Docker Compose and Dockerfiles
+├── scripts/        # Setup scripts
+├── tests/          # Cross-cutting tests (module boundaries, process startup)
+├── .github/        # CI workflow
 └── CLAUDE.md       # Permanent instructions for AI-assisted development
 ```
 
-Only `docs/`, `README.md` and `CLAUDE.md` exist today.
+The packages and apps exist as Phase 1 foundations only: `shared` holds env validation, error codes, the response envelope and health types; `db` holds the Prisma setup (no models yet); `editor` is an empty entry point; `web`, `api` and `collab` are shells with health endpoints.
 
 ## Prerequisites and setup
 
-There is **nothing to install or run yet**. When Phase 1 is completed, setup will require:
+Prerequisites: Node.js 24 (`.nvmrc`), pnpm 12.18.0 (`corepack enable`), Docker with Compose v2.
 
-- Node.js 24 LTS (planned baseline; see `docs/DECISIONS.md` D16, U1)
-- pnpm
-- Docker and Docker Compose (PostgreSQL, Redis, object storage for local development)
+```bash
+pnpm bootstrap        # creates .env, installs, starts PostgreSQL + Redis, builds packages, runs migrations
+pnpm dev:api          # http://localhost:4000   (/health, /ready)
+pnpm dev:collab       # http://localhost:4100   (/health, /ready)
+pnpm dev:web          # http://localhost:3000   (/health)
+```
 
-Phase 1 will replace this section with working, tested instructions.
+Manual equivalent: `cp .env.example .env`, `pnpm install`, `pnpm infra:up`, `pnpm build:packages`, `pnpm db:migrate:deploy` (the db scripts read the repository-root `.env` automatically).
+
+Quality checks: `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test:unit`, `pnpm test:integration` (needs `pnpm infra:up` + migrations), `pnpm build`. Run everything with `pnpm check`. See `docs/TESTING.md` §12.
+
+Optionally run the three apps in containers too: `docker compose -f infra/docker-compose.yml --profile apps up --build` (the app images are provided but have not been built in CI yet).
+
+Credentials in `.env.example` are local development defaults only. Never commit `.env`.
 
 ## Roadmap
 
 | Phase | Name | Status |
 |---|---|---|
-| 0 | Documentation and Architecture | Documentation written; awaiting owner approval |
-| 1 | Project Setup and Infrastructure (including a disposable collaboration spike) | Not started |
+| 0 | Documentation and Architecture | Documentation written |
+| 1 | Project Setup and Infrastructure (including a disposable collaboration spike) | Infrastructure done; collaboration spike not done (D33) |
 | 2 | Authentication and User Management | Not started |
 | 3 | Workspaces, Pages and Permissions | Not started |
 | 4 | Rich-Text Editor | Not started |

@@ -71,6 +71,8 @@ flowchart LR
 
 ## Phase 1 – Project Setup and Infrastructure (including the collaboration spike)
 
+> **Status (2026-11-12): Phase 1a (infrastructure) implemented; Phase 1b (collaboration spike, AC-1.8–AC-1.10) NOT done** — see D33 and `docs/HANDOVER.md` §3. Scope lines below for MinIO (D37) and real migrations (D35) were adjusted as recorded in those decisions.
+
 **Objectives:** A working, verified monorepo and local infrastructure; empirical answers to the open collaboration questions before Phases 5–9 depend on them.
 
 **Scope**

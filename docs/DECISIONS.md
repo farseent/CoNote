@@ -1,7 +1,7 @@
 # CoNote – Technical Decisions
 
-**Status:** Phase 0 (planning). No application code exists.
-**Last updated:** 2026-11-11
+**Status:** Phase 1 infrastructure implemented (D33–D40 added); Phase 1b collaboration spike outstanding.
+**Last updated:** 2026-11-12
 **Owner:** Project owner (approvals) / Claude (drafting)
 
 This is the permanent decision register for CoNote. Decision IDs (`D#`) and unresolved-question IDs (`U#`) are **permanent**: they are never renumbered or reused. A changed decision is recorded by adding a new decision that supersedes the old one and updating the old one's status.
@@ -52,6 +52,14 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 | D30 | Invitation token handling | Proposed |
 | D31 | API versioning and response envelope | Proposed |
 | D32 | Application-level realtime events | Proposed |
+| D33 | Phase 1 delivered in two parts; collaboration spike deferred (Phase 1b) | Proposed (Phase 1) |
+| D34 | Operational endpoints return plain JSON with a `service` field | Proposed (Phase 1) |
+| D35 | Baseline migration is empty; readiness "schema-compatible" definition | Proposed (Phase 1) |
+| D36 | Internal packages compile to `dist`; apps resolve packages by built output | Proposed (Phase 1) |
+| D37 | Object storage (MinIO) not in Docker Compose in Phase 1 | Proposed (Phase 1) |
+| D38 | Collab shell accepts the WebSocket handshake but rejects every document connection | Proposed (Phase 1) |
+| D39 | Tooling versions pinned beyond D11–D13 | Proposed (Phase 1) |
+| D40 | Environment validation scope and rules | Proposed (Phase 1) |
 
 ---
 
@@ -309,17 +317,49 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 
 ---
 
+### D33 – Phase 1 delivered in two parts; collaboration spike deferred (Phase 1b)
+
+`docs/IMPLEMENTATION_PLAN.md` Phase 1 includes a disposable collaboration spike (S1–S11, AC-1.8–1.10) and the resolution of U3/U4/V1–V6/V11–V14. The owner's Phase 1 task list (16 items) covered infrastructure only and did not include the spike. **Phase 1a (infrastructure) is implemented; Phase 1b (spike and its documentation, AC-1.8 … AC-1.10, AC-1.11 re-check) is not done.** Whether to run 1b before Phase 2 or later is the owner's decision (recommendation: before Phase 5, because Phases 5–9 depend on its findings; Phases 2–4 do not).
+
+### D34 – Operational endpoints return plain JSON with a `service` field
+
+`GET /health` returns `{status:"ok",service}` and `GET /ready` returns `{status,service,dependencies:{postgres,redis}}` on both API and collab (and `/health` on web). They are not wrapped in the D31 envelope (API_CONTRACTS §13 says they are not under `/api/v1`). The `service` field is an addition to the contract. API readiness is `not_ready` (503) only when PostgreSQL is not healthy; collab readiness is `degraded` (200) when only Redis is down.
+
+### D35 – Baseline migration is empty; readiness "schema-compatible" definition
+
+`packages/db/prisma/schema.prisma` has no models in Phase 1 (the first models, User and Session, arrive in Phase 2). One baseline migration (`20261111000000_baseline`, SQL `SELECT 1;`) exists so that `prisma migrate deploy` has something to apply and the migration pipeline can be exercised in CI before real schema exists. "Schema-compatible" in readiness currently means: `_prisma_migrations` exists and contains no failed (unfinished, not rolled back) migration. It does **not** compare applied migrations with the migrations the running build expects; that must be added once real models exist (Phase 2).
+
+### D36 – Internal packages compile to `dist`
+
+`@conote/shared`, `@conote/db` and `@conote/editor` are built with `tsc` to `dist/` and export only `dist` (types and JS). Apps resolve them by package name, so `pnpm run build:packages` must run before app typecheck/tests/dev (the root `typecheck`, `test*` scripts do this). `@conote/db` build runs `prisma generate` first; the generated client lives in `packages/db/src/generated/` (git-ignored) and is compiled into `dist/generated`.
+
+### D37 – Object storage not in Docker Compose in Phase 1
+
+The plan lists S3-compatible storage (MinIO "if practical", U7). The owner's Phase 1 task list did not include it, no Phase 1–3 feature uses it, and MinIO's current official image distribution could not be verified. **U7 stays open**; add the storage service in Phase 4 after verifying distribution/licensing.
+
+### D38 – Collab shell rejects every document connection
+
+Hocuspocus accepts connections unless a hook refuses them. The Phase 1 collab process therefore throws in `onConnect` for every document connection, so an unauthenticated open collaboration endpoint never exists. The WebSocket upgrade handshake itself succeeds (this proves the WebSocket server is running); Phase 6 replaces the hook with real authentication.
+
+### D39 – Tooling versions pinned beyond D11–D13
+
+Exact pins added: ESLint 10.14.0, `@eslint/js` 10.0.1, typescript-eslint 8.72.2 (supports TypeScript `<6.1`), `@next/eslint-plugin-next` 16.4.6, eslint-plugin-react-hooks 7.1.1, globals 17.14.0, Prettier **3.9.10**, `@types/node` 24.19.2 (matches Node 24), tsx 4.23.15, pino 10.4.0, pino-pretty 13.2.0, ioredis 5.6.1, pg 8.23.1, `@prisma/adapter-pg` 7.10.1, yjs 13.6.33, y-protocols 1.0.7, `@tailwindcss/postcss` 4.3.5, zod 4.6.7. Prettier 3.10.0 (released 2026-11-11) was rejected by pnpm 12's release-age supply-chain gate; 3.9.10 (2026-10-10) is used instead rather than excluding the package from the gate. pnpm 12 requires explicit build-script approval: `allowBuilds` in `pnpm-workspace.yaml` allows only `@prisma/engines`, `prisma` and `esbuild`. TypeScript stays 5.9.3 (U2).
+
+### D40 – Environment validation scope and rules
+
+Zod schemas live in `@conote/shared` (`apiEnvSchema`, `collabEnvSchema`, `webEnvSchema`, `dbEnvSchema`); `parseEnv(scope, schema, source)` is pure. Each process validates at startup and exits non-zero on failure. Error messages list variable names and reasons only, never values. Only variables used by the current phase are validated; later phases add theirs with their code. `NODE_ENV` has no default and must be set. Web validates in `instrumentation.ts` at server start.
+
 ## Unresolved decisions
 
 Each item blocks nothing in Phase 0. The "Needed by" column states when a decision must be made.
 
 | ID | Question | Options | Recommendation | Needed by |
 |---|---|---|---|---|
-| **U1** | Node.js baseline: 24 or 26? | Node 24 LTS (Maintenance from 2026-10-20, EOL 2028-04-30); Node 26 (Active LTS from 2026-10-28, EOL 2029-04-30) | Node 24 now (D16); re-evaluate Node 26 after confirming all native modules and CI images | Phase 1 start |
-| **U2** | TypeScript version: 5.9.3 or newer (6.x/7.x)? | Stay on 5.9.3; adopt 6.x; adopt 7.x | Stay on 5.9.3 (D17); trial newer in a separate branch once the toolchain is verified | Phase 1 (toolchain setup) |
+| **U1** *(Phase 1: Node 24 implemented, awaiting owner sign-off)* | Node.js baseline: 24 or 26? | Node 24 LTS (Maintenance from 2026-10-20, EOL 2028-04-30); Node 26 (Active LTS from 2026-10-28, EOL 2029-04-30) | Node 24 now (D16); re-evaluate Node 26 after confirming all native modules and CI images | Phase 1 start |
+| **U2** *(Phase 1: 5.9.3 implemented and verified with typescript-eslint 8.72.2, Next 16.4.6, Prisma 7.10.1, Vitest 5.1.0; awaiting sign-off)* | TypeScript version: 5.9.3 or newer (6.x/7.x)? | Stay on 5.9.3; adopt 6.x; adopt 7.x | Stay on 5.9.3 (D17); trial newer in a separate branch once the toolchain is verified | Phase 1 (toolchain setup) |
 | **U3** | Do the Hocuspocus store hooks and Redis extension behave as the persistence design (D15) assumes? (debounce option names, store-on-unload, behaviour of change/store hooks for updates that arrive via Redis, duplicate writes, lock behaviour) | Diff-on-store (baseline); per-update append from change hook with origin filtering | Diff-on-store; spike decides | Phase 1 spike |
 | **U4** | Awareness semantics: do awareness updates propagate across instances and from read-only connections (viewers/commenters), and what happens to stale awareness states after an instance crash? | n/a (empirical) | Verify in spike; if read-only connections cannot publish awareness, decide whether viewers appear in presence | Phase 1 spike |
-| **U5** | Prisma 7 setup in a pnpm monorepo: generator output location, driver adapter usage, `prisma.config.ts`, migration workflow | Per official docs | Confirm in Phase 1 against official docs; record exact setup in IMPLEMENTATION_PLAN notes | Phase 1 |
+| **U5** *(Phase 1: setup implemented, see D35/D36 and HANDOVER §4; `migrate deploy` not yet executed by Claude, needs CI/owner confirmation)* | Prisma 7 setup in a pnpm monorepo: generator output location, driver adapter usage, `prisma.config.ts`, migration workflow | Per official docs | Confirm in Phase 1 against official docs; record exact setup in IMPLEMENTATION_PLAN notes | Phase 1 |
 | **U6** | Invitation email delivery provider | SMTP via Mailpit in dev + provider TBD in prod; transactional email API | Phase 3 ships **link-based** invitations plus an email-adapter interface (console/Mailpit for dev); pick a production provider before Phase 11 | Phase 3 (link only) / Phase 11 (provider) |
 | **U7** | Image upload flow and limits | Presigned direct upload to object storage; upload through the API | Presigned upload with server-side validation of type and size limits; exact limits to be set in Phase 4. Also confirm MinIO's current distribution/licensing for local dev | Phase 4 |
 | **U8** | Behaviour of comment anchors after version restore (D8 + D9) | Mark affected threads "detached" (kept, unanchored); attempt re-anchoring by quoted text | Mark detached, keep thread and quoted text; re-anchoring is a later enhancement | Phase 8 |

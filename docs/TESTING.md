@@ -257,3 +257,15 @@ CI provider is assumed to be GitHub Actions (to be confirmed in Phase 1). The pi
 | Fault-injection proxy implementation | Phase 6 |
 | Load-test stop criteria and run plans | Phase 9 (before each run) |
 | CI provider confirmation | Phase 1 |
+
+## 12. Commands (implemented in Phase 1)
+
+| Command | What it does | Needs services |
+|---|---|---|
+| `pnpm lint` / `pnpm format:check` | ESLint (including module-boundary rules) / Prettier check | No |
+| `pnpm typecheck` | Builds packages, runs `tsc --noEmit` in every workspace and for root tests | No |
+| `pnpm test:unit` | Vitest project `unit` (`*.test.ts`): env validation, envelope/errors, health logic with fake dependencies, collab HTTP/WebSocket shell, boundary-lint deliberate violations, startup fail-fast | No |
+| `pnpm test:integration` | Vitest project `integration` (`*.int.test.ts`): real PostgreSQL and Redis, readiness incl. outage cases, real process start and shutdown. POSIX/Linux verifies graceful SIGTERM and exit code 0; Windows verifies startup, health endpoints and process termination because Windows does not deliver catchable POSIX signals to child processes. | Yes: `DATABASE_URL`, `REDIS_URL`, migrations applied |
+| `pnpm test` | Both projects | Yes |
+
+Integration tests **fail** (they do not skip) if `DATABASE_URL`/`REDIS_URL` are missing. The GitHub Actions verification job runs on `ubuntu-latest`, so the real-process tests exercise the production SIGTERM handlers and require exit code 0 in CI. Windows local runs still verify that both child processes start, serve their health/readiness endpoints, and terminate; they do not claim to verify graceful SIGTERM handling. Playwright (E2E) is not configured yet; it arrives with the first end-to-end flow (Phase 2).
