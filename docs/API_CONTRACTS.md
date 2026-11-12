@@ -1,7 +1,7 @@
 # CoNote – REST API Contracts
 
-**Status:** Phase 0 design. No endpoint is implemented.
-**Last updated:** 2026-11-11
+**Status:** Phase 1 operational endpoints `GET /health` and `GET /ready` are implemented for the API service; the feature endpoints in this document remain design-only and are not implemented.
+**Last updated:** 2026-11-12
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md). Models are in [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md). Collaboration traffic (Yjs sync, awareness, application events, version create/restore) is **not** REST; see [WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md).
 

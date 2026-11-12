@@ -29,10 +29,10 @@ Not planned for the first version: offline-first editing, external guest access,
 | Collaboration | Yjs (CRDT), Hocuspocus WebSocket server, Redis |
 | API | Node.js, Fastify, Zod |
 | Data | PostgreSQL, Prisma ORM |
-| Object storage | S3-compatible storage (MinIO for local development) |
+| Object storage | Planned S3-compatible storage (MinIO/local option to be verified in Phase 4; not present in Phase 1 Compose) |
 | Tooling | pnpm workspaces, Docker, Vitest, Playwright |
 
-Exact pinned versions and the compatibility checks behind them are listed in `docs/PROJECT_MASTER.md` §6 (verified against package metadata on 2026-11-11; not yet installed or run together).
+Exact pinned versions are listed in `docs/PROJECT_MASTER.md` §6. Phase 1a pins were installed and exercised by the reported checks and CI; future-phase dependencies are reverified when introduced.
 
 ## Planned architecture
 

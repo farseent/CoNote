@@ -1,7 +1,7 @@
 # CoNote – Testing Strategy
 
-**Status:** Phase 0 design. No tests exist yet.
-**Last updated:** 2026-11-11
+**Status:** Phase 1a test foundation implemented and reported passing (9 test files; 59 tests: 47 unit and 12 integration). Product-feature and collaboration-spike tests are not yet implemented.
+**Last updated:** 2026-11-12
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); requirements and metrics (`FR-*`, `NFR-*`, `PERF-*`) in [PROJECT_MASTER.md](PROJECT_MASTER.md); guarantees `G1`–`G7` in [ARCHITECTURE.md](ARCHITECTURE.md) §8; phases and acceptance criteria (`AC-*`) in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
@@ -188,7 +188,21 @@ All metrics are measured, never assumed. Targets are set only after a baseline e
 
 ## 8. Traceability
 
-Statuses are all **not started** in Phase 0. Test ids are added as tests are written; the Phase 10 acceptance criterion AC-10.1 requires no empty rows.
+Phase 1a infrastructure tests exist and have been run; feature-specific rows below remain not started until their phase implements them. The Phase 10 acceptance criterion AC-10.1 requires no empty rows.
+
+### 8.0 Phase 1a executed evidence (owner-reported 2026-11-12)
+
+| Evidence | Result |
+|---|---|
+| Test suite | 9 files; 59 tests passed (47 unit, 12 integration) |
+| Unit/integration coverage | Shared env/envelope/error/health logic, API and collab shell endpoints, dependency readiness/degraded behaviour, real-process startup/shutdown, and module-boundary lint rules |
+| Root checks | `pnpm check` passed: lint, Prettier check, typecheck and tests |
+| CI | GitHub Actions workflow passed on the owner-reported run |
+| Database | `pnpm db:migrate:deploy` succeeded; `pnpm db:migrate:status` reported up to date |
+| Infrastructure | Docker Compose PostgreSQL and Redis services reported healthy; local PostgreSQL host port is 5433 → container 5432 |
+| Not covered | S1–S11 collaboration spike, product-feature tests, performance/load baselines, production Docker image build/deployment |
+
+The table records results reported by the project owner; it is not an independent rerun by this documentation review. Detailed phase acceptance evidence is in HANDOVER.md.
 
 ### 8.1 Requirements
 
@@ -225,7 +239,7 @@ Statuses are all **not started** in Phase 0. Test ids are added as tests are wri
 | `PAGE-10` | `API`, `WS`, `SEC` | 6 |
 | `CMT-01` … `CMT-06` | `API`, `PERM` | 8 |
 | `VER-01` … `VER-03` | `API`, `PERM` | 8 |
-| `OPS-01`, `OPS-02` | `IT` | 1 |
+| `OPS-01`, `OPS-02` | `IT` | 1 (Phase 1a tests pass) |
 
 ### 8.3 Permission matrix
 
@@ -240,7 +254,7 @@ PROJECT_MASTER §5 is the single source for the matrix. Every cell (role × acti
 | Nightly | `CE` (long seeds), `MB` full (3 browsers), `REC`, `RECON`, `E2E` full | scheduled |
 | Pre-release | `LOAD` runs with recorded results, `SEC` full, dependency audit | before a release/phase sign-off |
 
-CI provider is assumed to be GitHub Actions (to be confirmed in Phase 1). The pipeline uses service containers or Compose for PostgreSQL, Redis and object storage.
+GitHub Actions is the configured and owner-reported passing CI provider. The current workflow uses PostgreSQL and Redis service containers; object storage is not part of Phase 1 CI (D37). The Fast/Standard/Nightly/Pre-release stages above are the intended future testing strategy, not all implemented as separate jobs in the current workflow.
 
 ## 10. Recording results
 
@@ -251,12 +265,13 @@ CI provider is assumed to be GitHub Actions (to be confirmed in Phase 1). The pi
 
 ## 11. Open items
 
+GitHub Actions is the confirmed CI provider; the Phase 1a workflow is configured and the owner reports a passing run on 2026-11-12.
+
 | Item | Resolved in |
 |---|---|
 | Value of N (client count) for the standard `CE` through-server test | Phase 6 (chosen from spike results and recorded) |
 | Fault-injection proxy implementation | Phase 6 |
 | Load-test stop criteria and run plans | Phase 9 (before each run) |
-| CI provider confirmation | Phase 1 |
 
 ## 12. Commands (implemented in Phase 1)
 

@@ -1,4 +1,4 @@
-# CoNote – Phase 0 Documentation Corrections
+# CoNote – Phase 0 Documentation Corrections (Historical Record)
 
 These are documentation-only corrections. No application code was implemented and no tests or infrastructure experiments were run.
 
@@ -44,6 +44,6 @@ These are documentation-only corrections. No application code was implemented an
 - PROJECT_MASTER.md
 - README.md
 
-## Important status
+## Historical status
 
-The documents remain in Phase 0 and await owner review. The corrections are design requirements, not verified implementation results. Phase 1 must not start until the owner approves Phase 0. Phase 9 must verify the Redis recovery mechanism; Phase 8 must verify the restore barrier.
+This file records design corrections made during Phase 0. It is a historical summary, not the current project status. Phase 1a infrastructure has since been implemented and owner-reported as verified; Phase 1b collaboration experiments remain outstanding. Current status and evidence are maintained in `docs/HANDOVER.md`. The Redis recovery mechanism still requires Phase 9 verification; the version-restore barrier still requires Phase 8 implementation and verification.

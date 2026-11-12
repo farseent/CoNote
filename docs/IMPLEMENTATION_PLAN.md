@@ -1,7 +1,7 @@
 # CoNote – Implementation Plan
 
-**Status:** Phase 0 design. No phase after Phase 0 has started.
-**Last updated:** 2026-11-11
+**Status:** Phase 1a infrastructure is complete based on owner-reported local and CI verification. Phase 1b collaboration spike is outstanding and is the next approved work before Phase 2.
+**Last updated:** 2026-11-12
 
 IDs used: decisions `D#`/`U#` ([DECISIONS.md](DECISIONS.md)); requirements `FR-*`, `NFR-*`, `PERF-*` ([PROJECT_MASTER.md](PROJECT_MASTER.md)); endpoints (`AUTH-01` …) ([API_CONTRACTS.md](API_CONTRACTS.md)); guarantees `G1`–`G7` and verification items `V1`–`V14` ([ARCHITECTURE.md](ARCHITECTURE.md)). Test categories are defined in [TESTING.md](TESTING.md): `UT` unit, `IT` integration, `API`, `DB`, `WS`, `CE` concurrent editing, `MB` multi-browser, `PERM` permission, `RECON` reconnection, `REC` recovery, `LOAD`, `E2E`, `SEC`, and `GT` guarantee tests (G1–G7).
 
@@ -78,7 +78,7 @@ flowchart LR
 **Scope**
 
 - Repository and tooling: pnpm workspace, `tsconfig.base.json` (strict), ESLint with module-boundary rules, Prettier, Vitest configuration, `.nvmrc`/`engines`, exact version pins (D11–D13, D16, D17).
-- Local infrastructure with Docker Compose: PostgreSQL 17, Redis 7.x, S3-compatible storage (MinIO if practical, U7).
+- Local infrastructure with Docker Compose: PostgreSQL 17 and Redis 7.x. S3-compatible storage/MinIO is deliberately deferred from Phase 1 (D37) and reconsidered in Phase 4 (U7).
 - Application shells: `apps/web` (Next.js starter page), `apps/api` (Fastify with `OPS-01`/`OPS-02`), `apps/collab` (process shell without collaboration features), `packages/db`, `packages/shared`, `packages/editor` (empty entry points).
 - CI pipeline (assumption: GitHub Actions, since the repository is on GitHub): install, lint, typecheck, test.
 - Prisma 7 configuration confirmed against official docs (U5, V8).
@@ -94,13 +94,13 @@ flowchart LR
 | S4 | Baseline persistence: row-locked diff append into `DocumentUpdate`-like rows; compaction into a state row | D15, U3 |
 | S5 | Hocuspocus debounce option names, store-on-unload, and whether the store hook fires on every instance for updates arriving via Redis (duplicate rows) | V1, V2, U3 |
 | S6 | **Recovery:** kill an instance mid-editing, restart, reconnect; content equals the last committed state; test with and without a surviving client | G3, G4 |
-| S7 | **Redis outage:** stop Redis during editing on two instances, then restore; observe divergence and reconvergence | V4, G5 |
-| S8 | Authentication hook with a short-lived EdDSA token; token not in URL; token function on reconnect; close codes surfaced to the client | V5, V6, V13 |
+| S7 | **Redis outage:** stop Redis during editing on two instances, then restore; observe missed Pub/Sub updates and divergence, then test a candidate explicit reconnect/resynchronization procedure. Redis restart alone is not considered recovery | V4, G5, U13 |
+| S8 | Prototype the Hocuspocus authentication hook with a short-lived throwaway EdDSA token; verify token is not placed in the URL and observe auth-failure close behaviour. Record reconnect token-callback capability if practical; production fresh-token acquisition belongs to Phase 6 (V6) | V5, V6, V13 |
 | S9 | Client-to-server stateless message handler round trip | V12 |
-| S10 | Awareness identity enforcement: reject or drop an awareness state with a forged user id | V14 |
-| S11 | Message size and connection limit mechanisms | V11 |
+| S10 | Prototype awareness identity enforcement by rejecting or rewriting a forged user id; record the mechanism and limitations. Production presence integration remains Phase 7 | V14 |
+| S11 | Inspect Hocuspocus 4.8 hooks/options for message-size and connection-limit enforcement; record what is available and what must be implemented. Do not treat this as production abuse protection or load testing (V11; implementation/tuning in Phases 6/9) | V11 |
 
-**Out of scope:** Any production collaboration feature, real authentication, real schema migrations (spike schema is throwaway and not part of migration history).
+**Out of scope:** Any production collaboration feature, real user authentication/authorization, production token refresh, production presence/abuse enforcement, real application schema migrations, or performance/load certification. The spike uses throwaway tokens and a throwaway database schema; neither enters the production migration history.
 
 **Dependencies:** Phase 0 approved.
 
@@ -110,7 +110,7 @@ flowchart LR
 
 **API changes:** `OPS-01 GET /health`, `OPS-02 GET /ready`.
 
-**Technical considerations:** confirm Node 24 + pinned versions install and run together (U1, U2); resolve exact `@tiptap/y-tiptap` version (D20); decide pnpm install method; check MinIO distribution/licensing status (U7); record Prisma 7 monorepo setup (U5).
+**Technical considerations:** Node 24 and TypeScript 5.9.3 are implemented and have passed the reported checks; owner sign-off remains pending (U1/U2). Prisma 7 monorepo setup is evidenced by client generation, real DB connectivity and successful baseline migration deploy/status (U5/V8). Resolve the exact `@tiptap/y-tiptap` pin in Phase 5; MinIO/storage remains deferred to Phase 4 (U7/D37).
 
 **Acceptance criteria**
 
@@ -119,18 +119,18 @@ flowchart LR
 | AC-1.1 | `pnpm install --frozen-lockfile` succeeds on Node 24 on a clean checkout in CI. |
 | AC-1.2 | Root `lint`, `typecheck` and `test` scripts exist and pass in CI. |
 | AC-1.3 | A lint test proves that a deliberate forbidden import (e.g. `web` → `db`) fails the boundary rule. |
-| AC-1.4 | `docker compose up` starts PostgreSQL, Redis and object storage; health checks pass; README documents the steps. |
+| AC-1.4 | `docker compose up` starts PostgreSQL and Redis with passing health checks; README documents the steps. Object storage is explicitly not required in Phase 1 and is deferred under D37/U7. |
 | AC-1.5 | `web`, `api`, `collab` shells start. Liveness is independent of dependencies. API readiness returns `200` when PostgreSQL is healthy and schema-compatible; Redis-down status is reported separately and does not alone make the API unready. Collab readiness reports PostgreSQL and Redis independently; it reports degraded multi-instance capability when Redis is down. Tests cover each dependency independently. |
 | AC-1.6 | Every pinned version in `package.json` matches PROJECT_MASTER.md §6 or the difference is recorded in DECISIONS.md; `engines` and `.nvmrc` are set. |
 | AC-1.7 | Prisma client generates and connects to PostgreSQL in the monorepo; the setup is recorded (U5/V8 resolved). |
 | AC-1.8 | Spike scenarios S1–S11 are each executed, with pass/fail/observation recorded in `docs/spikes/phase-1-collab-spike.md`, including environment and exact versions. |
-| AC-1.9 | For each of U3, U4, V1–V6, V11–V14: resolved with evidence, or re-recorded as still unresolved with reason and owner decision. |
-| AC-1.10 | Architectural implications of the spike are written into DECISIONS.md/ARCHITECTURE.md/WEBSOCKET_PROTOCOL.md (e.g. persistence design changes), and U1, U2, U5 are resolved with decisions. |
+| AC-1.9 | Record spike-level evidence for U3/U4, V1–V5, V12–V14. For V6 and V11, record the library capability/limitations observed and explicitly defer production token refresh and abuse enforcement to Phases 6/9. Every item must be marked resolved at the level tested or remain open with a reason, owner and target phase; spike observations must not be represented as production verification. |
+| AC-1.10 | Architectural implications of the spike are written into DECISIONS.md/ARCHITECTURE.md/WEBSOCKET_PROTOCOL.md. U5/V8 is resolved with the Phase 1a implementation and migration evidence. U1/U2 must receive explicit owner decisions (accept Node 24 and TypeScript 5.9.3, or choose alternatives) before Phase 1 is closed. |
 | AC-1.11 | The spike directory is removed (or clearly archived and excluded from builds) and no production collaboration feature code exists. |
 
 **Testing requirements:** `UT` for tooling sanity; `IT` for `/ready` behaviour; spike scenarios are manual-scripted experiments recorded in the results document (not part of the permanent test suite).
 
-**Completion requirements:** Definition of Done (§1); spike results reviewed by the owner; HANDOVER.md updated for Phase 2.
+**Completion requirements:** Definition of Done (§1); spike results reviewed by the owner; spike removed or archived outside production builds; HANDOVER.md updated. Phase 2 remains blocked until the owner explicitly approves it.
 
 ---
 

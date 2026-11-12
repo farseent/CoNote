@@ -1,6 +1,6 @@
 # CoNote – Technical Decisions
 
-**Status:** Phase 1 infrastructure implemented (D33–D40 added); Phase 1b collaboration spike outstanding.
+**Status:** Phase 1a infrastructure implemented; Phase 1b collaboration spike outstanding and owner-selected before Phase 2. U5/V8 resolved by reported implementation evidence; U1/U2 owner sign-off pending.
 **Last updated:** 2026-11-12
 **Owner:** Project owner (approvals) / Claude (drafting)
 
@@ -52,7 +52,7 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 | D30 | Invitation token handling | Proposed |
 | D31 | API versioning and response envelope | Proposed |
 | D32 | Application-level realtime events | Proposed |
-| D33 | Phase 1 delivered in two parts; collaboration spike deferred (Phase 1b) | Proposed (Phase 1) |
+| D33 | Phase 1 delivered in two parts; collaboration spike deferred (Phase 1b) | Accepted (owner chose Phase 1b before Phase 2) |
 | D34 | Operational endpoints return plain JSON with a `service` field | Proposed (Phase 1) |
 | D35 | Baseline migration is empty; readiness "schema-compatible" definition | Proposed (Phase 1) |
 | D36 | Internal packages compile to `dist`; apps resolve packages by built output | Proposed (Phase 1) |
@@ -319,7 +319,7 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 
 ### D33 – Phase 1 delivered in two parts; collaboration spike deferred (Phase 1b)
 
-`docs/IMPLEMENTATION_PLAN.md` Phase 1 includes a disposable collaboration spike (S1–S11, AC-1.8–1.10) and the resolution of U3/U4/V1–V6/V11–V14. The owner's Phase 1 task list (16 items) covered infrastructure only and did not include the spike. **Phase 1a (infrastructure) is implemented; Phase 1b (spike and its documentation, AC-1.8 … AC-1.10, AC-1.11 re-check) is not done.** Whether to run 1b before Phase 2 or later is the owner's decision (recommendation: before Phase 5, because Phases 5–9 depend on its findings; Phases 2–4 do not).
+`docs/IMPLEMENTATION_PLAN.md` Phase 1 includes a disposable collaboration spike (S1–S11, AC-1.8–1.10) and the resolution/qualification of U3/U4/V1–V6/V11–V14. The owner's original Phase 1 task list covered infrastructure only, so delivery was split into Phase 1a and Phase 1b. **Phase 1a is complete based on the owner-reported evidence in HANDOVER.md; Phase 1b remains outstanding. The owner has explicitly chosen to run Phase 1b before Phase 2.** Phase 2 must not start until the spike is completed, its results reviewed, and the owner separately approves Phase 2.
 
 ### D34 – Operational endpoints return plain JSON with a `service` field
 
@@ -351,15 +351,15 @@ Zod schemas live in `@conote/shared` (`apiEnvSchema`, `collabEnvSchema`, `webEnv
 
 ## Unresolved decisions
 
-Each item blocks nothing in Phase 0. The "Needed by" column states when a decision must be made.
+The "Needed by" column states the phase gate for each item. Resolved items remain listed with their evidence so permanent IDs are preserved.
 
 | ID | Question | Options | Recommendation | Needed by |
 |---|---|---|---|---|
-| **U1** *(Phase 1: Node 24 implemented, awaiting owner sign-off)* | Node.js baseline: 24 or 26? | Node 24 LTS (Maintenance from 2026-10-20, EOL 2028-04-30); Node 26 (Active LTS from 2026-10-28, EOL 2029-04-30) | Node 24 now (D16); re-evaluate Node 26 after confirming all native modules and CI images | Phase 1 start |
-| **U2** *(Phase 1: 5.9.3 implemented and verified with typescript-eslint 8.72.2, Next 16.4.6, Prisma 7.10.1, Vitest 5.1.0; awaiting sign-off)* | TypeScript version: 5.9.3 or newer (6.x/7.x)? | Stay on 5.9.3; adopt 6.x; adopt 7.x | Stay on 5.9.3 (D17); trial newer in a separate branch once the toolchain is verified | Phase 1 (toolchain setup) |
+| **U1** *(Implemented and exercised; owner sign-off pending)* | Node.js baseline: 24 or 26? | Node 24 LTS (Maintenance from 2026-10-20, EOL 2028-04-30); Node 26 (Active LTS from 2026-10-28, EOL 2029-04-30) | Node 24 now (D16); re-evaluate Node 26 after confirming all native modules and CI images | Owner decision before Phase 1 close |
+| **U2** *(Implemented and exercised; owner sign-off pending)* | TypeScript version: 5.9.3 or newer (6.x/7.x)? | Stay on 5.9.3; adopt 6.x; adopt 7.x | Stay on 5.9.3 (D17); trial newer in a separate branch once the toolchain is verified | Owner decision before Phase 1 close |
 | **U3** | Do the Hocuspocus store hooks and Redis extension behave as the persistence design (D15) assumes? (debounce option names, store-on-unload, behaviour of change/store hooks for updates that arrive via Redis, duplicate writes, lock behaviour) | Diff-on-store (baseline); per-update append from change hook with origin filtering | Diff-on-store; spike decides | Phase 1 spike |
 | **U4** | Awareness semantics: do awareness updates propagate across instances and from read-only connections (viewers/commenters), and what happens to stale awareness states after an instance crash? | n/a (empirical) | Verify in spike; if read-only connections cannot publish awareness, decide whether viewers appear in presence | Phase 1 spike |
-| **U5** *(Phase 1: setup implemented, see D35/D36 and HANDOVER §4; `migrate deploy` not yet executed by Claude, needs CI/owner confirmation)* | Prisma 7 setup in a pnpm monorepo: generator output location, driver adapter usage, `prisma.config.ts`, migration workflow | Per official docs | Confirm in Phase 1 against official docs; record exact setup in IMPLEMENTATION_PLAN notes | Phase 1 |
+
 | **U6** | Invitation email delivery provider | SMTP via Mailpit in dev + provider TBD in prod; transactional email API | Phase 3 ships **link-based** invitations plus an email-adapter interface (console/Mailpit for dev); pick a production provider before Phase 11 | Phase 3 (link only) / Phase 11 (provider) |
 | **U7** | Image upload flow and limits | Presigned direct upload to object storage; upload through the API | Presigned upload with server-side validation of type and size limits; exact limits to be set in Phase 4. Also confirm MinIO's current distribution/licensing for local dev | Phase 4 |
 | **U8** | Behaviour of comment anchors after version restore (D8 + D9) | Mark affected threads "detached" (kept, unanchored); attempt re-anchoring by quoted text | Mark detached, keep thread and quoted text; re-anchoring is a later enhancement | Phase 8 |
@@ -370,6 +370,12 @@ Each item blocks nothing in Phase 0. The "Needed by" column states when a decisi
 | **U13** | Which explicit Phase 9 recovery mechanism detects and reconciles documents after Redis Pub/Sub message loss? Options: force clients to reconnect to PostgreSQL-hydrated state, or implement verified server-to-server reconciliation. Redis reconnect alone is insufficient. | Select from Phase 1/9 evidence; forced reconnect is the conservative baseline | Phase 9 |
 
 ---
+
+## Resolved questions
+
+| ID | Question | Resolution and evidence |
+|---|---|---|
+| **U5 – RESOLVED (Phase 1a, 2026-11-12)** | Prisma 7 setup in a pnpm monorepo: generator output, driver adapter, `prisma.config.ts` and migration workflow | Prisma 7.10.1 configured with `prisma-client` output under `packages/db/src/generated/prisma`, `@prisma/adapter-pg`, and `prisma.config.ts`. Owner reports successful client generation, a real adapter query, `pnpm db:migrate:deploy`, and `pnpm db:migrate:status` reporting up to date. See D35/D36 and HANDOVER §3. |
 
 ## Superseded decisions
 

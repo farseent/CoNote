@@ -1,11 +1,11 @@
 # CoNote – WebSocket Protocol
 
-**Status:** Phase 0 design. Nothing is implemented.
-**Last updated:** 2026-11-11
+**Status:** Protocol design only. The Phase 1 collab process shell and health endpoints exist, but every document connection is deliberately rejected; no CoNote collaboration protocol feature is implemented. Phase 1b spike is outstanding.
+**Last updated:** 2026-11-12
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); guarantees `G1`–`G7` and verification items `V#` are in [ARCHITECTURE.md](ARCHITECTURE.md) (§8, §18). REST contracts are in [API_CONTRACTS.md](API_CONTRACTS.md).
 
-Items marked **(to verify)** depend on Hocuspocus 4.8 behaviour that has not been tested; the Phase 1 spike or the named phase confirms them before they are relied on.
+Items marked **(to verify)** depend on Hocuspocus 4.8 behaviour that has not been tested in the CoNote Phase 1b spike; the spike or named later phase must confirm them before they are relied on.
 
 ## 1. Overview and message layers
 
@@ -279,7 +279,7 @@ Every revalidation interval (initial 60 s, `COLLAB_REVALIDATE_INTERVAL_MS`, D22)
 
 - Updates and awareness received on one instance are forwarded through Redis to the others; every instance handles every message (D2).
 - Each instance persists via the row-locked diff procedure (ARCHITECTURE §8.2), so concurrent stores from several instances stay correct; redundant rows are harmless.
-- **Redis outage:** instances keep serving their own connections; cross-instance propagation pauses; persistence continues; reconvergence after Redis returns is expected through Yjs sync and **must be verified (V4, G5)**.
+- **Redis outage:** instances may continue serving their already-connected clients and PostgreSQL persistence remains independent; cross-instance propagation pauses. Redis Pub/Sub does not replay messages missed during the outage. Redis reconnection alone does **not** guarantee that already-open documents reconverge. The spike must observe divergence and evaluate a candidate explicit resync/reconnect procedure; production recovery is selected and verified in Phase 9 (U13/G5).
 - No clients are routed by document; any client may connect to any instance.
 
 ## 11. Error handling, limits and abuse protection

@@ -1,7 +1,7 @@
 # CoNote – Architecture
 
-**Status:** Phase 0 design. Nothing described here is implemented yet.
-**Last updated:** 2026-11-11
+**Status:** Phase 1a infrastructure foundations are implemented. The collaboration architecture, persistence model and product features remain design-only; Phase 1b spike is not yet run.
+**Last updated:** 2026-11-12
 
 Decision IDs (`D#`) and unresolved IDs (`U#`) are defined in [DECISIONS.md](DECISIONS.md). Requirement IDs (`FR-*`, `NFR-*`, `PERF-*`) are in [PROJECT_MASTER.md](PROJECT_MASTER.md). Statements marked **(to verify)** are assumptions that the Phase 1 spike or a named phase must confirm before they are relied on (collected in §18).
 
@@ -402,9 +402,9 @@ Exact endpoint shapes and fallback behaviour are specified in API_CONTRACTS.md a
 | `web` | 3000 |
 | `api` | 4000 |
 | `collab` (instance 1 / 2) | 4100 / 4101 |
-| PostgreSQL | 5432 |
+| PostgreSQL | 5433 on host → 5432 in Compose container |
 | Redis | 6379 |
-| MinIO S3 API / console | 9000 / 9001 |
+| MinIO S3 API / console | 9000 / 9001 when added (not in Phase 1 Compose; D37) |
 
 ### Production (reference, provider-neutral – U10)
 
@@ -454,7 +454,7 @@ Hocuspocus hook payloads use web-standard `Request`/`Headers` since v4; document
 | V5 | Token delivered in the provider's authentication message, not in the URL | Phase 1 spike / Phase 6 |
 | V6 | Provider accepts a token function for fresh tokens on reconnect | Phase 6 |
 | V7 | Next.js rewrite forwarding of `Origin`, `Host`, `X-Forwarded-*`, `Set-Cookie` | Phase 2 |
-| V8 | Prisma 7 + pnpm monorepo setup (generator output, driver adapter, config) | Phase 1 (U5) |
+| V8 | Prisma 7 + pnpm monorepo setup (generator output, driver adapter, config) | **Resolved in Phase 1a**: client generation, real adapter query, baseline migration deploy/status reported successful (U5; HANDOVER §3) |
 | V9 | Exactly which Yjs binding package the pinned Tiptap version needs (`@tiptap/y-tiptap`) | Phase 5 |
 | V10 | Applying a server-side transaction to a live document for restore | Phase 8 |
 | V11 | WebSocket message size limits and connection-limit mechanisms in Hocuspocus 4 | Phase 6 / 9 |

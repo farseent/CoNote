@@ -1,15 +1,15 @@
 # CoNote – Deployment
 
-**Status:** Phase 0 design. Nothing has been built, packaged or deployed.
-**Last updated:** 2026-11-11
+**Status:** Local Phase 1a infrastructure and service shells are implemented. PostgreSQL/Redis Compose services, baseline migrations, CI and local checks have been reported successful. Production packaging/deployment and Docker app-image build are not verified; Phase 11 remains outstanding.
+**Last updated:** 2026-11-12
 
-Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); architecture in [ARCHITECTURE.md](ARCHITECTURE.md); protocol in [WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md). The production hosting target is **unresolved (U10)**, so this document is **provider-neutral**: it defines container images, topology, configuration, operations and runbooks that work on a single VM with Docker Compose or on a managed container platform. It is finalized and executed in Phase 11 (IMPLEMENTATION_PLAN AC-11.1 … AC-11.8). Everything below is a *plan*; commands and values marked "provisional" are confirmed in Phase 1/6/11.
+Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); architecture in [ARCHITECTURE.md](ARCHITECTURE.md); protocol in [WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md). The production hosting target is **unresolved (U10)**, so this document is **provider-neutral**: it defines container images, topology, configuration, operations and runbooks that work on a single VM with Docker Compose or on a managed container platform. It is finalized and executed in Phase 11 (IMPLEMENTATION_PLAN AC-11.1 … AC-11.8). Production topology, hardening and runbooks below remain plans unless explicitly identified as implemented in the Phase 1a notes above.
 
 ## 1. Environments
 
 | Environment | Purpose | Infrastructure |
 |---|---|---|
-| Local development | Day-to-day work | Docker Compose for PostgreSQL, Redis and S3-compatible storage; apps run on the host with `pnpm` |
+| Local development | Day-to-day work | Docker Compose for PostgreSQL and Redis; apps run on the host with `pnpm`. S3-compatible storage is deferred (D37/U7) |
 | CI | Automated tests | Service containers/Compose (TESTING.md §9) |
 | Staging (optional, recommended before Phase 11 sign-off) | Production-like verification | Same topology as production, separate data and secrets |
 | Production | Live system | Reference topology (§2) on the target chosen in U10 |
@@ -21,9 +21,9 @@ Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); architecture in [
 | `web` | 3000 |
 | `api` | 4000 |
 | `collab` instance 1 / 2 | 4100 / 4101 |
-| PostgreSQL 17 | 5432 |
+| PostgreSQL 17 | 5433 on the host → 5432 in the Compose container |
 | Redis 7.x | 6379 |
-| S3-compatible storage (MinIO if practical) | 9000 (API) / 9001 (console) |
+| S3-compatible storage (MinIO if practical; not included in Phase 1 Compose, D37) | 9000 (API) / 9001 (console), when added |
 
 ## 2. Reference production topology
 
@@ -163,7 +163,7 @@ No secret appears in the repository, images, logs or CI output. `.env.example` c
 ### Redis 7.x (disposable)
 
 - Used for Hocuspocus fan-out, rate limiting and access events (D2, D14). Correctness never depends on its contents.
-- Persistence (RDB/AOF) is optional and not relied upon. After a Redis restart, instances reconnect; cross-instance sync resumes (G5, verified in Phase 9).
+- Persistence (RDB/AOF) is optional and not relied upon. Instances may reconnect after a Redis restart, but Pub/Sub messages missed during the outage are not replayed. Cross-instance live-document reconvergence requires an explicit recovery mechanism; Redis reconnection alone is insufficient (U13/G5, Phase 9).
 - Set a memory limit and an eviction policy appropriate for rate-limit counters (confirmed in Phase 9). Protect with authentication/network isolation; TLS if it crosses untrusted networks.
 
 ### Object storage (S3-compatible)
@@ -224,12 +224,12 @@ No secret appears in the repository, images, logs or CI output. `.env.example` c
 - [ ] Dependency and image scanning in CI/CD
 - [ ] Security headers (`helmet`) and CORS allow-list verified on the deployment
 
-## 12. CI/CD (assumption: GitHub Actions, to be confirmed in Phase 1)
+## 12. CI/CD (GitHub Actions configured and owner-reported passing in Phase 1a)
 
 | Stage | Action |
 |---|---|
-| Pull request | Fast + Standard stages (TESTING.md §9) |
-| Main branch | Build images, push to the registry with commit SHA tags |
+| Pull request | Current workflow: frozen install, lint, format check, typecheck, migration deploy, unit/integration tests, production build. Broader Fast/Standard stages remain the target in TESTING.md §9 |
+| Main branch | Current workflow verifies source/build; image publish/deploy is not implemented yet |
 | Release | Pre-release stage, migrate job, rolling deploy, smoke test |
 
 ## 13. Hosting target options (U10 – decision needed before Phase 11)

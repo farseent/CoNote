@@ -1,23 +1,40 @@
 # CoNote – Handover
 
 **Last updated:** 2026-11-12
-**Current phase:** Phase 1 – Project Setup and Infrastructure. **Phase 1a (infrastructure) implemented; Phase 1b (collaboration spike) NOT done** (D33). Awaiting owner review.
-**Next phase:** Phase 2 – Authentication and User Management (**not started; do not start without the owner's approval**). The collaboration spike (Phase 1b) is an owner decision: run it before Phase 2 or later (recommended: before Phase 5).
 
-Read `CLAUDE.md` first. This file is the single place for current status; other documents describe the design.
+**Current phase:** Phase 1 – Project Setup and Infrastructure. **Phase 1a (infrastructure) is complete based on owner-reported local and CI evidence. Phase 1b (disposable collaboration spike) is not started and is the next selected task.** The owner has explicitly chosen to complete Phase 1b before Phase 2 (D33).
 
-## 1. Status summary
+**Next phase after the current task:** Phase 2 – Authentication and User Management. **Not started and blocked** until Phase 1b is completed, its results and documentation are reviewed, and the owner separately approves Phase 2.
 
-| Item | Status |
+Read `CLAUDE.md` first. This file is the source of truth for current project status.
+
+## 1. Current status
+
+| Area | Current state |
 |---|---|
-| Application code | Foundations only: `apps/web|api|collab` shells, `packages/shared|db|editor`. **No product feature exists** (no auth, models, editor, collaboration) |
-| Local verification (2026-11-12, sandbox) | `lint`, `format:check`, `typecheck`, `pnpm install --frozen-lockfile`, `pnpm build` exit 0; 59 tests pass (47 unit, 12 integration against real PostgreSQL 17.11 and Redis 7.0.15). Details in §3 |
-| **Not verified by Claude** | `prisma migrate deploy` (Prisma schema engine could not be downloaded in the sandbox), Docker Compose and Docker image builds (no Docker in the sandbox), GitHub Actions run, PostgreSQL via the official `postgres:17-alpine` image. **The owner must run these (§3)** |
-| Phase 1b spike (S1–S11, AC-1.8–1.10) | Not done; U3, U4, V1–V6, V11–V14 remain unresolved |
-| Decisions added in Phase 1 | D33–D40 (Proposed) in `docs/DECISIONS.md` |
-| Owner-approved decisions | D1–D10 (explicit approval), D28 (roadmap structure) |
-| Proposed decisions awaiting sign-off | D15–D27, D29–D32, D33–D40 |
-| Next action | Owner runs the checks in §3.4, reviews, decides on Phase 1b, then approves Phase 2 |
+| Repository | pnpm monorepo with `apps/web`, `apps/api`, `apps/collab`, `packages/db`, `packages/shared`, `packages/editor`; root scripts, CI, Dockerfiles and local Compose configuration are present |
+| Product features | None implemented yet: no authentication, workspaces, page management, rich-text editor, production Yjs collaboration, presence, comments or version history |
+| API | Fastify foundation and operational `/health` and `/ready` endpoints implemented |
+| Collaboration server | Hocuspocus shell and operational endpoints implemented. It deliberately rejects every document connection; this is not a working collaboration service (D38) |
+| Database | Prisma 7.10.1 configured with an intentionally empty baseline migration. No application models or production document persistence exist |
+| Local infrastructure | PostgreSQL 17 and Redis 7 Compose services reported healthy. PostgreSQL host port 5433 maps to container port 5432; Redis host port 6379 |
+| Phase 1a verification | Owner reports `pnpm check` passed, 59 tests passed (47 unit + 12 integration), migrations deployed and up to date, Docker Compose PostgreSQL/Redis healthy, GitHub Actions CI passed, and the web shell was checked in a browser |
+| Docker app images | **Not verified**: do not infer that the optional `--profile apps` image build passed from the successful Compose infrastructure startup |
+| Phase 1b spike | Not started. No `spikes/collab-poc/` or `docs/spikes/phase-1-collab-spike.md` exists in the uploaded repository snapshot |
+| Phase 2 | Not started; blocked until Phase 1b review and explicit owner approval |
+
+### Decisions and open items
+
+- **D33:** Owner selected Phase 1b before Phase 2. D33 is recorded as accepted.
+- **U1 / D16:** Node.js 24 is implemented and exercised; explicit owner sign-off on the 24 baseline is still pending.
+- **U2 / D17:** TypeScript 5.9.3 is implemented and exercised; explicit owner sign-off is still pending.
+- **U3 / U4:** Hocuspocus persistence-hook and awareness behaviour remain open for Phase 1b.
+- **U5 / V8:** Resolved by Phase 1a evidence: Prisma client generation, real database connectivity, successful `migrate deploy`, and `migrate status` reporting up to date.
+- **U7 / D37:** Object storage/MinIO is deliberately omitted from Phase 1 Compose; revisit in Phase 4.
+- **U13:** Explicit production recovery after Redis Pub/Sub message loss remains a Phase 9 decision. Redis reconnection alone is not proof of reconvergence.
+- **D34–D40:** Implemented as Phase 1 design/implementation decisions but remain Proposed pending owner sign-off, except any item the owner separately accepts.
+
+The uploaded ZIP does not include `.git`, so it cannot independently establish the current branch or commit. The owner previously reported that commit `ba82d24` (`feat: Phase 1 project setup and infrastructure`) was pushed to `origin/main`.
 
 ## 2. Phase 0 record (historical)
 
@@ -143,92 +160,91 @@ The following design defects were corrected in the Phase 0 document set. These a
 - `PAGE-02` returns the whole accessible tree unpaginated; revisit with Phase 9 measurements.
 - CI provider (GitHub Actions) and GitHub hosting are assumptions.
 
-## 3. Phase 1 (infrastructure) – results
+## 3. Phase 1a – implementation and verification record
 
-### 3.1 What was built
+### 3.1 Implemented foundation
 
-- **Monorepo:** pnpm 12.18.0 workspace (`apps/*`, `packages/*`), Node 24 (`.nvmrc`, `engines`, `engine-strict`), `tsconfig.base.json` (strict, `noUncheckedIndexedAccess`, NodeNext), exact version pins (`.npmrc` `save-exact`), docs moved under `docs/`.
-- **web:** Next.js 16.4.6, React 19.3.1, Tailwind 4.3.5; starter page; `GET /health`; env validated at server start (`instrumentation.ts`). Standalone output only when `NEXT_OUTPUT=standalone` (Docker image).
-- **api:** Fastify 5.12.8; pino JSON logging with redaction; request ids (`X-Request-Id`, accepted only if safe); error envelope (D31) with no leaking of internals; `GET /health` (OPS-01), `GET /ready` (OPS-02); graceful SIGTERM/SIGINT shutdown.
-- **collab:** Hocuspocus 4.8.0 shell; HTTP `/health` and `/ready`; accepts the WebSocket handshake but **rejects every document connection** (D38); graceful shutdown.
-- **db:** Prisma 7.10.1 with `@prisma/adapter-pg`, generator `prisma-client` output `packages/db/src/generated/prisma` (git-ignored, generated by `build`/`typecheck`), `prisma.config.ts` reading `DATABASE_URL` from the environment, no models, one empty baseline migration (D35); `checkDatabase()` health check.
-- **shared:** Zod env schemas + `parseEnv`, error-code catalog and `AppError`, response envelope helpers, health types and readiness rules, logging constants. Pure: no I/O, no repository imports (lint-enforced).
-- **editor:** empty entry point.
-- **Tooling:** ESLint 10 flat config with module-boundary rules (D39), Prettier, Vitest 5.1.0 with `unit` and `integration` projects, GitHub Actions CI (`.github/workflows/ci.yml`), `.env.example`, Docker Compose (`postgres:17-alpine`, `redis:7-alpine`; optional `apps` profile with Dockerfiles), `pnpm bootstrap` script.
+- **Monorepo/tooling:** pnpm 12.18.0 workspace; Node 24 engine and `.nvmrc`; strict TypeScript with `noUncheckedIndexedAccess`; ESLint module-boundary rules; Prettier; Vitest unit/integration projects; exact pins.
+- **Web:** Next.js 16.4.6, React 19.3.1, Tailwind 4.3.5 starter shell, `/health`, startup environment validation.
+- **API:** Fastify 5.12.8 shell, structured/redacted logging, request IDs, standard error handling, `/health` and `/ready`, graceful shutdown.
+- **Collab:** Hocuspocus 4.8.0 shell, `/health` and `/ready`, graceful shutdown. `onConnect` rejects every document connection intentionally (D38).
+- **Database:** Prisma 7.10.1, `@prisma/adapter-pg`, `prisma-client` generator output under `packages/db/src/generated/prisma`, `prisma.config.ts`, and an empty baseline migration (`SELECT 1;`). No application models yet.
+- **Shared/editor:** shared Zod environment schemas, error/envelope/health/logging utilities; editor package is an empty entry point.
+- **Infrastructure/CI:** Docker Compose for PostgreSQL 17 and Redis 7; optional app Docker profile; GitHub Actions workflow; `.env.example`; bootstrap script.
 
-### 3.2 Acceptance criteria (Phase 1a)
+### 3.2 Phase 1a acceptance criteria
 
-Your 16-task list and the plan's AC-1.x are both reported. "Verified" means executed in the sandbox on 2026-11-12.
+Results below are based on the owner's reports in chat dated 2026-11-12. This review did not independently rerun the commands.
 
-| Criterion | Result | Evidence / caveat |
+| Criterion | Status | Evidence / qualification |
 |---|---|---|
-| Frontend starts | Verified | `next start` served `/` (200) and `/health`; fails fast with a named-variable error when `APP_URL`/`API_INTERNAL_URL` are missing |
-| Backend starts | Verified | Compiled and `pnpm deploy`-ed API served `/health`, `/ready`, standard 404 envelope; real-process integration test starts it via tsx and shuts it down with exit 0 |
-| WebSocket server starts | Verified | Collab test: handshake accepted; process started from `dist` and from tsx; `onConnect` rejects every document connection |
-| PostgreSQL connection works | Verified (PostgreSQL 17.11 binary from npm, not the Docker image) | `/ready` healthy; unreachable DB gives `503`/`unavailable` without leaking the URL |
-| Prisma connects | Verified | `prisma generate` and a real query through `@prisma/adapter-pg` in the db integration tests |
-| **Migrations run** | **NOT verified** | `prisma migrate deploy` needs the schema-engine binary from `binaries.prisma.sh`, which the sandbox blocks. In the sandbox the baseline was applied manually (`_prisma_migrations` row written by a script, not committed) so the readiness tests could run. **Run `pnpm db:migrate:deploy` yourself; CI also runs it** |
-| Redis connection works | Verified (Redis 7.0.15 from apt, not the Docker image) | `/ready` healthy; unreachable Redis: API stays `ready` (200) with redis `unavailable`, collab reports `degraded` |
-| Docker Compose starts required services | **NOT verified** | No Docker in the sandbox. `docker-compose.yml` is YAML-valid only. **Run `pnpm infra:up`** |
-| Docker images build | **NOT verified** | The `pnpm deploy` step used by `Dockerfile.node` was run locally and the result started; the Dockerfiles themselves were never built |
-| Linting and formatting work | Verified | `pnpm lint`, `pnpm format:check` exit 0 |
-| Tests execute | Verified | 59 passed (9 files): 47 unit + 12 integration |
-| Production build succeeds | Verified | `pnpm build` exit 0 (packages, api, collab, web). Standalone variant also builds |
-| CI workflow configured | Configured, **not run** | Valid YAML; never executed on GitHub. Needs a first run |
-| AC-1.1 frozen-lockfile install | Verified locally | `pnpm install --frozen-lockfile` exit 0; CI not yet run |
-| AC-1.3 boundary lint test | Verified | 13 deliberate violations fail, 4 allowed imports pass (`tests/boundaries.test.ts`) |
-| AC-1.4 compose incl. object storage | Not met | No Docker; object storage deliberately omitted (D37) |
-| AC-1.5 shells + readiness semantics | Verified | Unit tests (fake dependencies) and integration tests (real services) cover each dependency independently |
-| AC-1.6 pins match PROJECT_MASTER §6 | Verified for installed packages | Playwright, Tiptap, auth and S3 packages are not installed yet (arrive with their phases). Extra pins in D39 |
-| AC-1.7 Prisma generates and connects | Partly | Generates and connects (verified); `migrate deploy` unverified (above). U5/V8 not marked resolved |
-| AC-1.8 – AC-1.10 spike | Not done | Phase 1b (D33) |
-| AC-1.11 no production collaboration code | Met | No spike directory was created; collab only rejects connections |
+| AC-1.1 – frozen-lockfile install | **Pass (owner-reported)** | `pnpm install --frozen-lockfile`; CI also passed |
+| AC-1.2 – lint, typecheck and tests | **Pass (owner-reported)** | `pnpm check` passed |
+| AC-1.3 – module boundaries | **Pass (repository evidence + reported test run)** | `tests/boundaries.test.ts` contains 13 deliberate forbidden-import cases and 4 allowed-import cases |
+| AC-1.4 – local infrastructure | **Pass with D37 scope adjustment (owner-reported)** | PostgreSQL and Redis Compose services reported healthy. Object storage is not required in Phase 1; D37 defers MinIO |
+| AC-1.5 – service shells/readiness | **Pass (owner-reported)** | API/collab/web shells and readiness behaviour covered by the current unit/integration tests |
+| AC-1.6 – pins and runtime declarations | **Pass for Phase 1 packages (owner-reported)** | Root and workspace package manifests, `.nvmrc`, and `pnpm-lock.yaml` are present. Future-phase dependencies remain to be verified when added |
+| AC-1.7 – Prisma setup and migration | **Pass (owner-reported)** | `pnpm db:migrate:deploy` succeeded; `pnpm db:migrate:status` reported up to date. U5/V8 resolved |
+| AC-1.8 – S1–S11 collaboration spike | **Not done** | Phase 1b has not started |
+| AC-1.9 – spike findings for U3/U4/V1–V6/V11–V14 | **Not done** | Must be completed at the correct evidence level; production token refresh and abuse enforcement remain later-phase work |
+| AC-1.10 – architecture implications and U1/U2/U5 | **Partly complete** | U5/V8 resolved. U1/U2 still require explicit owner decisions. Phase 1b implications remain outstanding |
+| AC-1.11 – spike cleanup and no production collaboration code | **Partly complete** | No production collaboration feature code exists. Spike has not yet been created, so final removal/archive and exclusion check happen after Phase 1b |
 
-### 3.3 Sandbox-only workarounds (not in the repository)
+### 3.3 Test and CI evidence
 
-- `PRISMA_SCHEMA_ENGINE_BINARY=/bin/true` exported so `prisma generate` would not try to download the engine. **Not needed on a normal machine or in CI**.
-- Node 24 and PostgreSQL 17 binaries were fetched from npm packages; Redis from apt.
-- Baseline migration bookkeeping applied by a script instead of `prisma migrate deploy`.
+| Check | Owner-reported result |
+|---|---|
+| Test suite | 9 test files; 59 tests passed (47 unit, 12 integration) |
+| Root checks | `pnpm check` passed: lint, Prettier check, typecheck and tests |
+| Database | Baseline migration deploy succeeded; migration status up to date |
+| Local services | PostgreSQL and Redis Compose containers reported healthy |
+| CI | GitHub Actions run passed |
+| Browser smoke check | Web starter shell was opened and checked in a browser |
+| Docker app-image build | Not confirmed; do not mark as passed |
 
-### 3.4 Things you must run (in order)
+The integration tests use real PostgreSQL and Redis. The test files in the uploaded snapshot include `tests/boundaries.test.ts`, `tests/startup*.test.ts`, `apps/api/test/*`, `apps/collab/test/*`, `packages/db/test/*`, and `packages/shared/src/shared.test.ts`.
 
-1. `pnpm bootstrap` (or: `cp .env.example .env`, `pnpm install`, `pnpm infra:up`, `pnpm build:packages`, `pnpm db:migrate:deploy`). Confirm migrations apply and `pnpm db:migrate:status` is clean.
-2. `pnpm check`, then `pnpm dev:api`, `pnpm dev:collab`, `pnpm dev:web` and open `/health` and `/ready`.
-3. `docker compose -f infra/docker-compose.yml --profile apps up --build` to test the Dockerfiles.
-4. Push to GitHub and confirm the CI workflow passes (first run may need fixes, e.g. `pnpm/action-setup` with pnpm 12).
+### 3.4 Repository audit findings relevant to Phase 1b
 
-### 3.5 Known limitations and soft spots
+- The uploaded repository ZIP contains the expected monorepo packages and documentation, but **does not contain** `spikes/collab-poc/` or `docs/spikes/phase-1-collab-spike.md`.
+- `apps/collab` is only a shell: the Hocuspocus `onConnect` hook rejects every document connection. Do not build Phase 1b experiments inside this production shell.
+- `packages/db/prisma/schema.prisma` has no models. The baseline migration contains only `SELECT 1;`. The spike must use a disposable schema/database and must not add spike tables to the production Prisma migration history.
+- The current Compose mapping is PostgreSQL host `5433` → container `5432`; `.env.example` must use `localhost:5433` for host-run apps. The documentation correction package updates this value.
+- Redis is Pub/Sub, not durable. Missed messages are not replayed after reconnect; the spike must not describe Redis restart alone as a successful recovery.
+- MinIO/object storage is not in the Phase 1 Compose file by design (D37).
 
-- Readiness "schema-compatible" only checks for failed migrations (D35).
-- `redis.ts`, `logger.ts` and `dependencies.ts` are duplicated between `apps/api` and `apps/collab`. Consolidate if a third consumer appears; do not move I/O into `packages/shared`.
-- Fastify logs the request id as `reqId` (default) rather than `requestId`.
-- Unauthenticated WebSocket handshakes stay open until Hocuspocus' own timeout; acceptable only because Phase 1 is not exposed. Phase 6 must add origin/auth checks.
-- Integration tests assume migrations are applied and use whatever `DATABASE_URL` points to (a scratch database is created and dropped only in the schema-compatibility test).
-- Playwright is not configured yet.
-- Pin policy: pnpm 12's release-age gate blocked Prettier 3.10.0 (D39). Re-check the gate whenever versions are bumped.
+### 3.5 Phase 1b scope and guardrails
 
-## 4. Instructions for the next chat
+Phase 1b is a **disposable, manual-scripted collaboration spike** under `spikes/collab-poc/`, outside the workspace build and not imported by any package. It must not add production collaboration features, real authentication, production migrations or production persistence.
 
-**Phase 2 may start only after the owner approves.** Phase 1b (spike) is optional before Phase 2 (D33).
+Use two Hocuspocus instances on ports `4100` and `4101`, Redis, and a throwaway PostgreSQL schema/database. Execute S1–S11 from `docs/IMPLEMENTATION_PLAN.md` and record environment, exact versions, results, failures, observations and unresolved items in `docs/spikes/phase-1-collab-spike.md`.
 
-### Files to give the Phase 2 chat
+Important scope boundaries:
 
-Docs: `CLAUDE.md`; `docs/HANDOVER.md`; `docs/IMPLEMENTATION_PLAN.md` (Phase 2 and §1 Definition of Done); `docs/PROJECT_MASTER.md` (FR-AUTH, security NFRs, §6 pins); `docs/ARCHITECTURE.md` (module boundaries §5, session/cookie design §4); `docs/DATABASE_SCHEMA.md` (`User`, `Session`); `docs/API_CONTRACTS.md` (conventions, `AUTH-*`, `USER-*`, envelope, error codes); `docs/DECISIONS.md` (D5, D6, D25, D29, D31, D33–D40); `docs/TESTING.md`; `docs/DEPLOYMENT.md` (§4 configuration).
+- U3/U4 and V1–V5, V12–V14 require spike-level evidence.
+- V6 (fresh token acquisition on reconnect) may be inspected at library-capability level in the spike, but production token refresh belongs to Phase 6.
+- V11 message/connection limits may be inspected for available Hocuspocus mechanisms; production enforcement and tuning belong to Phases 6/9.
+- V14 may be prototyped in the spike; production presence identity enforcement belongs to Phase 7.
+- U13 production recovery design is decided and load/recovery-verified in Phase 9. The spike can test candidate resynchronization feasibility but cannot close the production requirement.
+- Do not use `docker compose down -v`; it deletes the local PostgreSQL volume.
 
-Code Phase 2 will change or build on: `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `.env.example`, `eslint.config.mjs`, `vitest.config.ts`, `tsconfig.base.json`, `.github/workflows/ci.yml`; `packages/shared/src/*`; `packages/db/` (`prisma/`, `prisma.config.ts`, `src/*`, `package.json`); `apps/api/` (`src/*`, `test/*`, `package.json`); `apps/web/` (`next.config.ts`, `src/*`, `package.json`, `tsconfig.json`); `tests/helpers.ts`.
+## 4. Next chat – Phase 1b preparation
 
-Not needed for Phase 2: `apps/collab`, `packages/editor`, `infra/` Dockerfiles, `scripts/`, `docs/WEBSOCKET_PROTOCOL.md`. Easiest is to upload the repository as a zip **without** `node_modules`, `.next`, `dist` and `.env`.
+The owner has chosen to do Phase 1b before Phase 2. The next chat should start by reading `CLAUDE.md`, this `HANDOVER.md`, and the Phase 1 section of `IMPLEMENTATION_PLAN.md`, then review `DECISIONS.md`, `ARCHITECTURE.md`, `WEBSOCKET_PROTOCOL.md`, `TESTING.md`, `DEPLOYMENT.md`, and the actual Compose/package files.
 
-### First steps for Phase 2
+Before writing the spike, verify:
+1. The working tree/branch is clean and the current docs are committed (the ZIP itself excludes `.git`, so use the local repository for this check).
+2. `infra/docker-compose.yml`, `.env` values, current PostgreSQL host port `5433`, Redis port `6379`, and running containers.
+3. A safe isolated throwaway PostgreSQL database/schema can be used without touching the application's baseline database.
+4. Spike dependencies and scripts remain isolated from the workspace's production build and lockfile where practical.
 
-1. Run §3.4 and fix anything it reveals; get the owner's go-ahead on D33–D40 and on U1/U2.
-2. Add `User` and `Session` models and the first real migration; extend readiness compatibility (D35).
-3. Follow `docs/IMPLEMENTATION_PLAN.md` Phase 2 (AC-2.1 … AC-2.12). Add Phase 2 environment variables with their code (D40), add `argon2` to `allowBuilds` in `pnpm-workspace.yaml`, and configure Playwright for the E2E criterion.
+Do not start Phase 2. After S1–S11, update the spike report, `DECISIONS.md`, `ARCHITECTURE.md`, `WEBSOCKET_PROTOCOL.md`, `IMPLEMENTATION_PLAN.md`, `TESTING.md`, and this handover. Report each AC-1.8–AC-1.11 with evidence and wait for owner review.
 
 ## 5. Change log
 
 | Date | Change |
 |---|---|
-| 2026-11-11 | Phase 0 documentation created in four batches; initial consistency review performed; this handover written. |
-| 2026-11-11 | Corrected Redis outage/recovery, owner invariant, readiness, page-tree concurrency and version-restore design; awaiting owner review. |
-| 2026-11-12 | Phase 1a infrastructure implemented (monorepo, shells, Prisma, Redis, Compose, CI, tests); decisions D33–D40 added; spike deferred (Phase 1b); several checks not verifiable in the sandbox (§3). |
+| 2026-11-11 | Phase 0 documentation created and initial design consistency review performed. |
+| 2026-11-11 | Corrected Redis outage/recovery, owner invariant, readiness, page-tree concurrency and version-restore design. |
+| 2026-11-12 | Phase 1a infrastructure implemented and owner-reported checks/CI/migrations passed; Phase 1b selected by owner before Phase 2. |
+| 2026-11-12 | Documentation status reconciled with the repository snapshot and owner-reported verification; Phase 1b scope boundaries clarified. |

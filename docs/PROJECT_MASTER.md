@@ -1,7 +1,7 @@
 # CoNote – Project Master
 
-**Status:** Phase 0 (planning and documentation). No application code exists and no feature is implemented.
-**Last updated:** 2026-11-11
+**Status:** Phase 1a infrastructure foundations implemented; Phase 1b collaboration spike not yet run. No product feature (authentication, workspaces, editor, collaboration, comments or version history) is implemented.
+**Last updated:** 2026-11-12
 
 This document is the complete project overview: goals, requirements, permissions, technology stack and roadmap summary. Technical decisions are in [DECISIONS.md](DECISIONS.md); decision IDs (`D#`) and unresolved IDs (`U#`) referenced here are defined there.
 
@@ -188,7 +188,7 @@ Requirement IDs are permanent and referenced by IMPLEMENTATION_PLAN.md and TESTI
 
 ### Measurable performance metrics (definitions only)
 
-No target values or results are stated in Phase 0. Baselines are measured (Phase 1 spike, Phase 9) and targets are then set by decision. Measurement methods are in TESTING.md.
+No performance targets or benchmark results are claimed yet. Phase 1a verified infrastructure and test execution but did not measure collaboration performance; baselines are measured in the Phase 1b spike and Phase 9, then targets are set by decision. Measurement methods are in TESTING.md.
 
 | ID | Metric | Definition |
 |---|---|---|
@@ -235,7 +235,7 @@ An Admin cannot change, remove or restrict the Owner, and cannot grant Owner.
 
 ## 6. Technology stack
 
-**Verification note.** Versions below are *candidate pins* verified on **2026-11-11** by reading engine and peer-dependency metadata from the npm registry. They are not yet installed or run together; Phase 1 confirms them at install and runtime and records any change in DECISIONS.md (D13).
+**Verification note (2026-11-12).** Exact pins used by the Phase 1a monorepo are installed and were exercised by the reported clean install, lint, format, typecheck, tests, build and CI run. Pins for future-phase libraries not yet present in the lockfile (for example Tiptap/Playwright/auth/storage dependencies) remain planned candidates and must be rechecked when introduced. Any compatibility-driven change is recorded under D13.
 
 ### Runtime and tooling
 
@@ -353,4 +353,4 @@ Full detail is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 - One repository; services are separately deployable (D3, D11).
 - PostgreSQL is authoritative for durable data; Redis is not (D14).
 - External guests, offline editing, workspace-level realtime events are out of scope for the MVP.
-- Unverified behaviours (listed in ARCHITECTURE.md §18 and DECISIONS.md U3–U5) are verified by the Phase 1 spike before they are relied on.
+- Unverified collaboration behaviours (ARCHITECTURE.md §18 and DECISIONS.md U3/U4) are investigated in Phase 1b before Phases 5–9 rely on them. Prisma monorepo setup (U5/V8) has been exercised through client generation, database connectivity and the successful baseline migration workflow; see HANDOVER.md.

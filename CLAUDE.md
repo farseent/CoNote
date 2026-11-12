@@ -22,7 +22,7 @@ The project is built in **phases (0–11)**. Current status is in `docs/HANDOVER
 - At the start of a phase: restate its objectives, scope, acceptance criteria (`docs/IMPLEMENTATION_PLAN.md`) and any unresolved decisions (`U#`) that affect it.
 - Do **not** start the next phase, and do not pull work forward from later phases, without explicit owner approval.
 - At the end of a phase: report against **every acceptance criterion** (pass/fail with evidence), update `docs/HANDOVER.md`, and **stop and wait for approval**.
-- Phase 0 (documentation) is complete only after the owner's approval; **no application code is written in Phase 0**.
+- Phase 0 documentation was approved when the owner proceeded with Phase 1. Do not describe Phase 1 implementation as Phase 0 work; keep current status in HANDOVER.md.
 
 ## 4. Non-negotiable technical rules
 
@@ -39,7 +39,8 @@ The project is built in **phases (0–11)**. Current status is in `docs/HANDOVER
 11. **TypeScript strict** everywhere; no `any` without a justification comment; validate every boundary input with Zod (D12, D4).
 12. **Module boundaries** (`docs/ARCHITECTURE.md` §5) are enforced: apps never import other apps; `web` never imports `db`; `shared` is pure.
 13. **Do not mark unimplemented features as complete** anywhere (README, HANDOVER, UI copy, docs).
-14. **Avoid unnecessary complexity.** No new service, library or abstraction without a stated need.\n15. **Database invariants must be real invariants.** A partial unique index enforces at most one workspace owner, not at least one; use the documented deferred owner-count trigger and test both. Page-tree mutations must serialize on the workspace-tree transaction lock and be backed by the same-workspace composite foreign key.
+14. **Avoid unnecessary complexity.** No new service, library or abstraction without a stated need.
+15. **Database invariants must be real invariants.** A partial unique index enforces at most one workspace owner, not at least one; use the documented deferred owner-count trigger and test both. Page-tree mutations must serialize on the workspace-tree transaction lock and be backed by the same-workspace composite foreign key.
 
 ## 5. Decisions
 
