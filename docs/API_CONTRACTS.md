@@ -1,7 +1,7 @@
 # CoNote – REST API Contracts
 
-**Status:** Phase 1 operational endpoints `GET /health` and `GET /ready` are implemented for the API service; the feature endpoints in this document remain design-only and are not implemented.
-**Last updated:** 2026-11-12
+**Status:** Implemented: operational endpoints `GET /health` and `GET /ready` (Phase 1) and **`AUTH-01`–`AUTH-07` and `USER-01`–`USER-02` (Phase 2; see §3.1 and §4.1 for confirmed behaviour and differences from the design)**. Phase 2 decisions D41–D47 were accepted by the owner on 2026-11-13. All other endpoints in this document remain design-only and are not implemented.
+**Last updated:** 2026-11-13
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md). Models are in [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md). Collaboration traffic (Yjs sync, awareness, application events, version create/restore) is **not** REST; see [WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md).
 
@@ -18,7 +18,7 @@ Endpoint IDs (e.g. `AUTH-02`) are permanent and used by TESTING.md and IMPLEMENT
 | Authentication | Session cookie (D5). "Auth: Session" below means a valid, unexpired, unrevoked session; otherwise `401 UNAUTHENTICATED`. |
 | CSRF | For `POST`, `PUT`, `PATCH`, `DELETE`: `Content-Type: application/json` required (else `415`) and `Origin` must be on the allow-list (else `403 INVALID_ORIGIN`). |
 | Validation | Zod schemas from `packages/shared`; unknown fields are rejected; failures return `400 VALIDATION_ERROR`. |
-| Rate limiting | Redis-backed; if Redis is unavailable, security-sensitive limits fail closed with scoped `503 SERVICE_UNAVAILABLE` unless a documented, bounded per-process fallback is explicitly approved for that limiter. Never silently disable authentication or abuse limits. Stricter on `AUTH-01`, `AUTH-02`, `AUTH-07`, `INV-05`, `INV-06`, `PAGE-10`, `ASSET-01`. Exceeding returns `429 RATE_LIMITED` with the standard retry headers emitted by the rate-limit plugin (confirmed in Phase 2). Limit values are chosen in Phase 2/10 and recorded, not guessed here. |
+| Rate limiting | Redis-backed. **Every rate-limited endpoint fails closed with `503 SERVICE_UNAVAILABLE` when Redis is unavailable; there is no per-process fallback (D45).** Stricter on `AUTH-01`, `AUTH-02`, `AUTH-07`, `INV-05`, `INV-06`, `PAGE-10`, `ASSET-01`. Exceeding returns `429 RATE_LIMITED` with the standard retry headers emitted by the rate-limit plugin. Implemented Phase 2 limits and initial values are recorded in §3.1; they are untuned starting points. |
 | Existence hiding | If the actor has no access at all to a workspace/page/thread, the API returns `404 NOT_FOUND`, not `403`. `403 FORBIDDEN` is used when the actor can see the resource but lacks the required role. |
 | Pagination | Cursor-based: `?limit=<1..100>&cursor=<opaque>`; default limit 50. Response `meta: { "nextCursor": string | null }`. |
 | No-content results | Operations with no payload return `200` with `data: null`. |
@@ -124,7 +124,7 @@ Activity      { id, workspaceId, pageId | null, actor: UserSummary | null, actio
 - **Errors:** `401`.
 
 ### AUTH-05 `GET /api/v1/auth/sessions`
-- **Auth:** Session. **Response `200`:** `{ "sessions": SessionInfo[] }` (own, non-revoked, non-expired).
+- **Auth:** Session. **Response `200`:** `{ "sessions": SessionInfo[] }` (own, non-revoked, non-expired). `current` is `true` only for the session represented by the request's valid session cookie; all other returned sessions have `current: false`.
 
 ### AUTH-06 `DELETE /api/v1/auth/sessions/:sessionId`
 - **Auth:** Session. **Authz:** the session must belong to the actor.
@@ -137,6 +137,25 @@ Activity      { id, workspaceId, pageId | null, actor: UserSummary | null, actio
 - **Response `200`:** `data: null`. Updates the hash and `passwordChangedAt`, **revokes all other sessions**, publishes `session.revoked` for each.
 - **Errors:** `400`, `401 INVALID_CREDENTIALS` (wrong current password), `429`.
 
+### 3.1 Phase 2 implementation notes (confirmed behaviour)
+
+| Topic | Behaviour |
+|---|---|
+| Cookie | Name `conote_session` (non-production) or `__Host-conote_session` (`NODE_ENV=production`); `HttpOnly`, `SameSite=Lax`, `Path=/`, no `Domain`, `Secure` in production, `Max-Age` = absolute lifetime (30 days). The name is derived from `NODE_ENV`, not configurable. Cleared with identical attributes on logout, on revoking the current session, and when a stale cookie is presented. |
+| Session lifetime | Idle (sliding) 7 days and absolute 30 days (`SESSION_IDLE_TTL_DAYS`, `SESSION_ABSOLUTE_TTL_DAYS`). `lastSeenAt` and the sliding expiry are written at most once per minute per session. `SessionInfo.expiresAt` is the earlier of the idle and absolute expiry. |
+| Check order | Origin/Content-Type (`403`/`415`) → rate limit (`429`/`503`) → request body parsing → **authentication (`401`)** → validation (`400`) → handler. An unauthenticated caller therefore always sees `401`, never `400`. A malformed JSON body is still `400` before authentication. |
+| JSON body | Every `POST`/`PUT`/`PATCH`/`DELETE` must send `Content-Type: application/json` **and a JSON body**; send `{}` when there is nothing to send (logout, session revocation). An empty body with that content type is `400`. |
+| Request limits | Bodies larger than 64 KiB are rejected with `413 PAYLOAD_TOO_LARGE`. |
+| Validation errors | `400 VALIDATION_ERROR` with `details: [{ path, message }]` (`path` is the field, e.g. `email`; messages never echo submitted values). |
+| Registration | The email is trimmed and lower-cased. A taken email returns `409 EMAIL_TAKEN`; two simultaneous registrations of one email produce exactly one `201`. A new presence colour is picked at random from a fixed palette. |
+| Login | A new session token is issued on every login (an existing cookie is never reused). Unknown email and wrong password return the identical `401 INVALID_CREDENTIALS`; an Argon2id verification is performed in both cases. |
+| Logout / revocation | The session row is marked revoked (never reused); a `session.revoked` event `{v:1,type,userId,sessionId,at}` is published to Redis channel `conote:events:access` on a best-effort basis (a Redis outage does not fail the request). |
+| Password change | Wrong current password: `401 INVALID_CREDENTIALS` (the web client treats only `UNAUTHENTICATED` as "signed out"). The current session stays valid; every other live session is revoked in the same transaction. |
+| Caching | Every `/api/*` response carries `Cache-Control: no-store`. |
+| Rate limits | Initial values, per window: `AUTH-01` 10 / hour per client IP; `AUTH-02` 20 / 15 min per client IP **and** 10 / 15 min per email address (all attempts count, so the limit also blocks the correct password once exceeded); `AUTH-07` 5 / 15 min per client IP **and** per user; all other authenticated endpoints 300 / minute per client IP. `429` carries `Retry-After` and `X-RateLimit-*` headers. These are untuned starting values (ARCHITECTURE §10.4). |
+| Fail closed | If Redis is unreachable every rate-limited endpoint (all of the above) answers `503 SERVICE_UNAVAILABLE`; if PostgreSQL is unreachable the affected endpoint answers `503`. No dependency detail is exposed. |
+| Client IP / trusted proxies | `TRUST_PROXY` is a comma-separated list of trusted IP addresses, CIDR ranges or `loopback`, `linklocal`, `uniquelocal`; empty means trust none. Forwarded headers are trusted only when the immediate peer is in that list. A boolean or hop count is not supported. Production must put a reverse proxy in front of the web tier that sets `X-Forwarded-For`, prevent direct access to the web tier, and list the web tier's address in the API's `TRUST_PROXY`; see ARCHITECTURE §10.3. |
+
 ## 4. Users (`USER`)
 
 ### USER-01 `GET /api/v1/users/me`
@@ -147,6 +166,10 @@ Activity      { id, workspaceId, pageId | null, actor: UserSummary | null, actio
 - **Request (all optional, at least one):** `{ "displayName"?: string, "presenceColor"?: "#RRGGBB", "avatarAssetId"?: uuid | null }`
 - **Validation:** as in DATABASE_SCHEMA §10; `avatarAssetId` must be a `READY` `AVATAR` asset uploaded by the actor.
 - **Response `200`:** `{ "user": User }`. **Errors:** `400`, `404` (asset).
+
+### 4.1 Phase 2 implementation notes
+
+`avatarAssetId` is **not implemented** (the `Asset` model arrives in Phase 4): it is rejected as an unknown field with `400 VALIDATION_ERROR`, and `User.avatarUrl` is always `null`. Only `displayName` and `presenceColor` can be updated; `presenceColor` is normalized to upper case. `email`, `id` and every other field are rejected with `400`. The request must contain at least one field.
 
 ## 5. Workspaces (`WS`)
 
@@ -378,7 +401,7 @@ Not under `/api/v1`; not proxied through the web app; used by orchestration and 
 | ID | Endpoint | Behaviour |
 |---|---|---|
 | OPS-01 | `GET /health` | Liveness: `200` if the process is running. |
-| OPS-02 | `GET /ready` | API readiness: `200` when PostgreSQL is reachable and schema-compatible; Redis health is reported separately and Redis outage alone does not make the API unready. A PostgreSQL failure or incompatible schema returns `503`. Response includes `status`, `dependencies.postgres`, and `dependencies.redis` (`healthy`/`degraded`/`unavailable`) without secrets. Collab has its own readiness endpoint: PostgreSQL is required; Redis-down is reported as degraded multi-instance capability. |
+| OPS-02 | `GET /ready` | API readiness: `200` when PostgreSQL is reachable and schema-compatible; schema-compatible means the migration history table exists, has no failed migration, and every migration directory shipped with this build is recorded as applied (D41). Applied migrations unknown to this build are tolerated; rolled-back rows do not count. A missing migrations directory, PostgreSQL failure or incompatible schema returns `503`/unavailable. Redis health is reported separately and Redis outage alone does not make the API unready. Response includes `status`, `service`, `dependencies.postgres`, and `dependencies.redis` (`healthy`/`degraded`/`unavailable`) without secrets. Collab has its own readiness endpoint: PostgreSQL is required; Redis-down is reported as degraded multi-instance capability. |
 
 ## 14. Side effects on other systems
 

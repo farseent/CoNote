@@ -1,7 +1,7 @@
 # CoNote – Testing Strategy
 
-**Status:** Phase 1a test foundation implemented and reported passing (9 test files; 59 tests: 47 unit and 12 integration). The disposable Phase 1b manual-scripted harness is prepared under `spikes/collab-poc/`, but S1–S11 have not yet been executed. Product-feature tests are not yet implemented.
-**Last updated:** 2026-11-12
+**Status:** Phase 1a test foundation (reported passing by the owner: 9 files, 59 tests) plus **Phase 2 authentication tests, run by Claude in a preparation environment: 17 files, 228 tests passed (115 unit + 113 integration), twice in a row** (§8.0a). The Phase 1b spike harness is under `spikes/collab-poc/`. Tests for workspaces, pages, editing and collaboration do not exist yet. **Browser E2E (Playwright) is not implemented.**
+**Last updated:** 2026-11-13
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); requirements and metrics (`FR-*`, `NFR-*`, `PERF-*`) in [PROJECT_MASTER.md](PROJECT_MASTER.md); guarantees `G1`–`G7` in [ARCHITECTURE.md](ARCHITECTURE.md) §8; phases and acceptance criteria (`AC-*`) in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
@@ -204,6 +204,31 @@ Phase 1a infrastructure tests exist and have been run; feature-specific rows bel
 
 The table records results reported by the project owner; it is not an independent rerun by this documentation review. Detailed phase acceptance evidence is in HANDOVER.md.
 
+### 8.0a Phase 2 executed evidence (Claude, preparation environment, 2026-11-13)
+
+Environment (not the owner's machine and not CI): Linux x86-64, 1 vCPU, Node 24.18.0 (npm package `node@24.18.0`), pnpm 12.18.0, **PostgreSQL 16.x** (apt; the project targets 17), Redis 7.x from apt, `next dev`/`next start` 16.4.6. The Prisma schema engine binary could not be downloaded there, so the Phase 2 migration SQL was applied with `psql` and `_prisma_migrations` was filled by script instead of `prisma migrate deploy`.
+
+| Evidence | Result |
+|---|---|
+| `pnpm test` (twice) | 17 files, 228 tests passed both times (about 35–48 s); exit code 0 |
+| `pnpm run test:unit` | 9 files, 115 tests passed |
+| `pnpm run lint`, `pnpm run format:check`, `pnpm run typecheck` | all passed |
+| `next build` | succeeded (all routes dynamic) |
+| Mutation spot checks | Temporarily breaking one behaviour at a time made tests fail as intended: ignoring `revokedAt` (3 failures), skipping the Origin allow-list (3), cookie without `HttpOnly` (2), accepting any password (2), ignoring the absolute expiry (1), removing the web 401 handler (2). Sources were restored afterwards. |
+
+| File | Category | Covers |
+|---|---|---|
+| `packages/shared/src/auth.test.ts` | UT | Request/response schemas, normalization, password bounds, strict objects, cookie name, session env |
+| `apps/api/test/auth-units.test.ts` | UT | Argon2id hashing/verification, token generation/hash (SHA-256 vector), Redis-outage error detection |
+| `apps/api/test/auth.int.test.ts` | API, DB, SEC | Register, login, logout, session list/revoke, password change, profile, all endpoints' success and error codes, 401 on every protected route, cookie attributes, Origin/Content-Type/CORS, uniform login errors, event publication, no secrets in responses |
+| `apps/api/test/session-lifecycle.int.test.ts` | API, DB | Idle expiry, sliding refresh, 30-day absolute cap, throttled `lastSeenAt` (controlled clock), expired sessions hidden/not revocable, cleanup job, DB constraints (lower-case email, colour format, token-hash format, unique email, cascade) |
+| `apps/api/test/security.int.test.ts` | SEC | Per-IP and per-account rate limits, 429 + `Retry-After`, fail-closed 503 for Redis and 503 for PostgreSQL outages, `X-Forwarded-For` handling (trusted/untrusted peer, forged left-most entry), production `__Host-` cookie, no secrets in logs, uniform error envelope |
+| `apps/api/test/web-auth.int.test.ts` | IT, E2E (HTTP level) | Real API process + real `next dev` server: redirects, proxy forwarding (V7), register → protected page → profile update → logout |
+| `apps/web/src/lib/api-client.test.ts`, `apps/web/src/components/auth-flows.test.tsx` | UT (jsdom) | API client envelope handling; login, registration, profile, password, header/logout and sessions UI flows, 401 handling, double-submit protection |
+| `packages/db/test/health.int.test.ts` (extended) | DB | Readiness requires every shipped migration; tolerates newer extras |
+
+**Not tested, stated plainly:** real browsers (cookie storage, form behaviour, layout); any Docker image build; the Compose `apps` profile; `prisma migrate deploy`/`migrate diff` for the Phase 2 migration; PostgreSQL 17; load behaviour of the rate limiter or Argon2 under concurrency beyond the 8-hash timing above; the web app behind a real reverse proxy.
+
 ### 8.1 Requirements
 
 | Requirement group | Primary categories | Phase |
@@ -279,7 +304,7 @@ GitHub Actions is the confirmed CI provider; the Phase 1a workflow is configured
 |---|---|---|
 | `pnpm lint` / `pnpm format:check` | ESLint (including module-boundary rules) / Prettier check | No |
 | `pnpm typecheck` | Builds packages, runs `tsc --noEmit` in every workspace and for root tests | No |
-| `pnpm test:unit` | Vitest project `unit` (`*.test.ts`): env validation, envelope/errors, health logic with fake dependencies, collab HTTP/WebSocket shell, boundary-lint deliberate violations, startup fail-fast | No |
+| `pnpm test:unit` | Vitest project `unit` (`*.test.ts` and, with `// @vitest-environment jsdom`, `*.test.tsx`): env validation, envelope/errors, health logic with fake dependencies, collab HTTP/WebSocket shell, boundary-lint deliberate violations, startup fail-fast | No |
 | `pnpm test:integration` | Vitest project `integration` (`*.int.test.ts`): real PostgreSQL and Redis, readiness incl. outage cases, real process start and shutdown. POSIX/Linux verifies graceful SIGTERM and exit code 0; Windows verifies startup, health endpoints and process termination because Windows does not deliver catchable POSIX signals to child processes. | Yes: `DATABASE_URL`, `REDIS_URL`, migrations applied |
 | `pnpm test` | Both projects | Yes |
 

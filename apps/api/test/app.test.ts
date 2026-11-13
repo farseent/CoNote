@@ -4,20 +4,24 @@ import type { DependencyStatus } from '@conote/shared';
 import { AppError } from '@conote/shared';
 import { buildApp } from '../src/app.js';
 import type { Dependencies } from '../src/dependencies.js';
+import { testConfig, unconnectedDependencies } from './helpers.js';
 
 function fakeDeps(postgres: DependencyStatus, redis: DependencyStatus): Dependencies {
-  return {
+  return unconnectedDependencies({
     checkPostgres: async () => postgres,
     checkRedis: async () => redis,
-    close: async () => {},
-  };
+  });
 }
 
 const silent = pino({ level: 'silent' });
 let current: ReturnType<typeof buildApp> | undefined;
 
 function make(postgres: DependencyStatus, redis: DependencyStatus) {
-  current = buildApp({ logger: silent, dependencies: fakeDeps(postgres, redis) });
+  current = buildApp({
+    logger: silent,
+    dependencies: fakeDeps(postgres, redis),
+    config: testConfig(),
+  });
   return current;
 }
 

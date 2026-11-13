@@ -15,6 +15,9 @@ COPY packages/db/package.json ./packages/db/package.json
 COPY packages/editor/package.json ./packages/editor/package.json
 RUN pnpm install --frozen-lockfile
 ENV NEXT_OUTPUT=standalone
+# The /api/* rewrite target is resolved at build time (next.config.ts), so it is a build arg.
+ARG API_INTERNAL_URL=http://api:4000
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
 RUN pnpm --filter @conote/shared run build && pnpm --filter @conote/web run build
 
 FROM node:24-slim AS web

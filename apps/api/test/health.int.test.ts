@@ -2,6 +2,7 @@ import { pino } from 'pino';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { createDependencies } from '../src/dependencies.js';
+import { testConfig } from './helpers.js';
 import {
   UNREACHABLE_DATABASE_URL,
   UNREACHABLE_REDIS_URL,
@@ -13,7 +14,7 @@ const logger = pino({ level: 'silent' });
 let app: ReturnType<typeof buildApp> | undefined;
 
 function make(env: { DATABASE_URL: string; REDIS_URL: string }) {
-  app = buildApp({ logger, dependencies: createDependencies(env, logger) });
+  app = buildApp({ logger, dependencies: createDependencies(env, logger), config: testConfig() });
   return app;
 }
 

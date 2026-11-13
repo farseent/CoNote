@@ -60,6 +60,8 @@ services:
       NODE_ENV: production
       PORT: '4000'
       APP_URL: http://localhost:3000
+      # The web container reaches the API over the Compose network (private address range).
+      TRUST_PROXY: uniquelocal
       DATABASE_URL: postgresql://${POSTGRES_USER:-conote}:${POSTGRES_PASSWORD:-conote_dev_password}@postgres:5432/${POSTGRES_DB:-conote}
       REDIS_URL: redis://redis:6379
     ports:
@@ -94,6 +96,8 @@ services:
     build:
       context: ..
       dockerfile: infra/Dockerfile.web
+      args:
+        API_INTERNAL_URL: http://api:4000
     environment:
       NODE_ENV: production
       APP_URL: http://localhost:3000

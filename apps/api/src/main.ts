@@ -1,6 +1,8 @@
 import { apiEnvSchema, parseEnv } from '@conote/shared';
 import { buildApp } from './app.js';
+import { createApiConfig } from './config.js';
 import { createDependencies } from './dependencies.js';
+import { startSessionCleanup } from './jobs/session-cleanup.js';
 import { createLogger } from './logger.js';
 
 async function main(): Promise<void> {
@@ -8,7 +10,13 @@ async function main(): Promise<void> {
   const env = parseEnv('api', apiEnvSchema, process.env);
 
   const logger = createLogger({ service: 'api', level: env.LOG_LEVEL, nodeEnv: env.NODE_ENV });
-  const app = buildApp({ logger, dependencies: createDependencies(env, logger) });
+  const dependencies = createDependencies(env, logger);
+  const app = buildApp({ logger, dependencies, config: createApiConfig(env) });
+  const stopSessionCleanup = startSessionCleanup({
+    prisma: dependencies.prisma,
+    clock: dependencies.clock,
+    logger,
+  });
 
   let shuttingDown = false;
   const shutdown = async (signal: string): Promise<void> => {
@@ -16,6 +24,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     logger.info({ signal }, 'shutting down');
     try {
+      stopSessionCleanup();
       await app.close();
       process.exit(0);
     } catch (err) {

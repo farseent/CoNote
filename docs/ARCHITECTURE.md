@@ -1,7 +1,7 @@
 # CoNote – Architecture
 
-**Status:** Phase 1a infrastructure foundations are implemented. The collaboration architecture, persistence model and product features remain design-only; Phase 1b spike is not yet run.
-**Last updated:** 2026-11-12
+**Status:** Phase 1 infrastructure and **Phase 2 authentication (§10)** are implemented and locally verified by the owner. Decisions D41–D47 were accepted by the owner on 2026-11-13. The collaboration architecture, persistence model and the remaining product features remain design-only.
+**Last updated:** 2026-11-13
 
 Decision IDs (`D#`) and unresolved IDs (`U#`) are defined in [DECISIONS.md](DECISIONS.md). Requirement IDs (`FR-*`, `NFR-*`, `PERF-*`) are in [PROJECT_MASTER.md](PROJECT_MASTER.md). Statements marked **(to verify)** are assumptions that the Phase 1 spike or a named phase must confirm before they are relied on (collected in §18).
 
@@ -246,10 +246,11 @@ Application events for access changes use a separate Redis pub/sub channel (§11
 
 ### 10.1 Authentication (D5)
 
-- Registration and login with email and password; Argon2id hashing (initial parameters m = 19456 KiB, t = 2, p = 1; re-tuned in Phase 2).
+- Registration and login with email and password; Argon2id hashing (`argon2` 0.45.2). **Phase 2 parameters: m = 19456 KiB, t = 2, p = 1 (the OWASP baseline, unchanged from the initial value).** Measured in the preparation sandbox (1 vCPU Intel Xeon @ 2.10 GHz, Node 24.18.0, 30 runs): hash median 26.0 ms, p95 28.6 ms; verify median 26.0 ms, p95 28.5 ms; 8 concurrent hashes took 260 ms in total. This is a small shared machine, **not** production hardware: re-measure on the deployment target and raise the cost if verification is under roughly 100 ms there (no change was made because no target hardware or latency budget has been defined).
 - Login creates a **session**: 32 random bytes, base64url-encoded, sent to the browser in a cookie. PostgreSQL stores only the **SHA-256 hash** plus user id, created/last-seen/expiry timestamps, user agent and IP.
-- Lifetimes: 7 days idle (sliding), 30 days absolute (tunable). Logout, password change and "revoke session" delete or invalidate sessions.
+- Lifetimes: `SESSION_IDLE_TTL_DAYS` (default 7, allowed 1–365) and `SESSION_ABSOLUTE_TTL_DAYS` (default 30, allowed 1–365). Idle expiry slides; absolute expiry does not. Logout, password change and "revoke session" invalidate sessions. The cookie name is derived from `NODE_ENV`, not configured independently.
 - Login failures are rate-limited and use uniform error messages to avoid account enumeration.
+- **Phase 2 implementation:** passwords are 12–128 characters, stored exactly as typed (no trimming) and never logged or returned; an unknown email performs a dummy Argon2id verification so both failure paths cost about the same. The API's `User` resource is built by explicit field mapping and the response schema strips unknown keys, so a password hash cannot leave through the API. A new session token is issued on every login. Passwords are not checked against breached-password lists and there is no email verification or password reset yet (not in the Phase 2 scope).
 
 ### 10.2 Session cookie
 
@@ -261,35 +262,46 @@ Application events for access changes use a separate Redis pub/sub channel (§11
 | `SameSite` | `Lax` |
 | `Path` | `/` |
 | `Domain` | **not set** (host-only cookie on the web origin) |
-| `Max-Age` | absolute lifetime (30 days); the server enforces idle expiry |
+| `Max-Age` | configured absolute lifetime (`SESSION_ABSOLUTE_TTL_DAYS`, default 30 days); the server also enforces sliding idle expiry (`SESSION_IDLE_TTL_DAYS`, default 7 days) |
+
+The cookie name is fixed by environment: `__Host-conote_session` when `NODE_ENV=production`, otherwise `conote_session` (D42). `SESSION_COOKIE_NAME` is not an implemented configuration variable. Both TTL variables accept integer day values from 1 through 365.
 
 ### 10.3 Same-origin proxy (D6)
 
-Illustrative configuration (not implemented):
+Implemented in `apps/web/next.config.ts`:
 
 ```ts
-// apps/web/next.config.ts
 async rewrites() {
-  return [{ source: '/api/:path*', destination: `${process.env.API_INTERNAL_URL}/api/:path*` }];
+  return [{ source: '/api/:path*', destination: `${apiInternalUrl}/api/:path*` }];
 }
 ```
+
+Next.js resolves rewrites **when the app is built**, so `API_INTERNAL_URL` must be present at `next build` time (`infra/Dockerfile.web` takes it as a build argument), not only at runtime.
 
 Rules:
 
 1. The browser only calls `/api/...` on the web origin; the API's `Set-Cookie` passes back through the rewrite, so the cookie belongs to the web origin.
-2. The API runs with `trustProxy` configured so client IP and protocol come from the web tier's forwarded headers **(to verify in Phase 2: exact headers the rewrite forwards, including `Origin`, `Host`, `X-Forwarded-*`)**.
+2. `TRUST_PROXY` is a comma-separated list of trusted IP addresses, CIDR ranges or the keywords `loopback`, `linklocal`, `uniquelocal`; an empty value trusts no proxy. Fastify derives the client IP by walking the forwarded chain from the right to the first untrusted address, and ignores forwarded headers from an untrusted immediate peer. A boolean or hop count is not accepted (D43). **V7 – measured in Phase 2 (Next.js 16.4.6, dev server and `next start` production build, against an echo server standing in for the API):** the rewrite forwards the request method, path, body, `Origin`, `Cookie` and `Content-Type` unchanged, passes response status and `Set-Cookie` back unchanged, and sets `Host` to the API host and `X-Forwarded-Host` to the web host. **It does not set `X-Forwarded-For` or `X-Forwarded-Proto`, and a client-supplied `X-Forwarded-For` is forwarded unmodified.** Therefore production must put a reverse proxy in front of the web app that sets/overwrites `X-Forwarded-For`; the web app must not be reachable except through that proxy; and the API's `TRUST_PROXY` must list the web tier's address(es), not blindly trust a hop count or all forwarded headers. Without this topology, IP limits either see a shared web-server address (if nothing is trusted) or can be spoofed (if untrusted client-supplied values are trusted). Per-account login and per-user password-change limits are unaffected. Server components forward the incoming `X-Forwarded-For` on their direct API calls for the same reason.
 3. Server components and route handlers that need API data call `API_INTERNAL_URL` directly and forward the session cookie explicitly.
 4. The API is on a private network and not reachable from the internet.
 5. WebSockets do **not** use this proxy.
 
 ### 10.4 REST request security (D25)
 
-- **CSRF:** `SameSite=Lax` plus, for `POST/PUT/PATCH/DELETE`: required `Content-Type: application/json` and a validated `Origin` header against an allow-list.
-- **CORS:** explicit origin allow-list (defence in depth, since the API is not called cross-origin).
-- **Headers:** `@fastify/helmet`.
-- **Rate limiting:** `@fastify/rate-limit` backed by Redis; stricter limits on register, login, invitation and collaboration-token endpoints.
-- **Validation:** Zod schemas at every endpoint; unknown fields rejected; body-size limits.
+- **CSRF:** `SameSite=Lax` plus, for `POST/PUT/PATCH/DELETE`: required `Content-Type: application/json` and a validated `Origin` header against an allow-list. *Implemented (Phase 2).* A request without an `Origin` header is rejected: browsers always send one on these methods, so non-browser clients must set it.
+- **Request pipeline (D44):** Origin/Content-Type checks and rate limiting run in `onRequest`; the body is parsed; authentication runs in `preValidation`; schema validation and then the route handler follow. This deliberately makes an unauthenticated request receive `401` before a schema validation error (`400`). The 64 KiB body limit and rate limiter bound unauthenticated work; malformed JSON is rejected during body parsing.
+- **CORS:** explicit origin allow-list (defence in depth, since the API is not called cross-origin). *Implemented* (`@fastify/cors` 11.4.1, credentials allowed only for listed origins).
+- **Headers:** `@fastify/helmet` 13.2.0 defaults. *Implemented.* `Cache-Control: no-store` on every `/api/*` response. The web app's own response headers (CSP etc.) are not configured yet (Phase 10).
+- **Rate limiting (D45):** `@fastify/rate-limit` 11.2.2 is backed by Redis. Per-IP limits use the plugin per route (`global: false`); account-scoped login-per-email and password-change-per-user limits use `createRateLimit` with a non-IP key and the same Redis store. Implemented Phase 2 limits and untuned initial values are in API_CONTRACTS §3.1. All attempts count, including successful logins. This means someone who knows an email address can block password login for that account for up to the 15-minute window. **Fail closed:** when Redis is unreachable every rate-limited endpoint returns `503`; there is no per-process fallback. Because the general authenticated-request limit is also rate-limited, authenticated requests are blocked during a Redis outage.
+- **Validation:** Zod schemas at every endpoint; unknown fields rejected; request bodies limited to 64 KiB (`413`).
 - **Authorization:** every endpoint resolves the actor and calls the shared permission function (D23) before acting; failures return the standard error envelope (D31).
+
+### 10.5 Web authentication flow (D46)
+
+- Protected pages call `requireUser()` in a server component, forwarding the incoming session cookie to the API. The `(app)` layout also checks the user, but layouts are not re-run on client-side navigation, so each protected page repeats the check.
+- If the API returns `401 UNAUTHENTICATED`, the page/action redirects or signs the UI out to `/login`. Other lookup failures (for example, API unavailable) are errors and must not be misrepresented as an expired session.
+- The root layout seeds the client `AuthProvider` with the public user profile. Browser actions use same-origin `/api/v1/*` requests. The session token remains in the HttpOnly cookie and is never readable by client-side scripts.
+- There is no `next`/return-URL parameter and no Next.js middleware/proxy file. Frontend coverage uses jsdom component tests plus an HTTP-level test against the real Next.js server; Playwright browser E2E is not yet implemented (D26, D46).
 
 ## 11. WebSocket authentication and authorization (D7, D22)
 
@@ -386,7 +398,7 @@ sequenceDiagram
 Liveness answers whether a process is running; readiness answers whether that specific service can safely accept the class of work it serves. Do not use one global readiness result for all dependencies.
 
 - **API liveness:** process/event loop is alive; no dependency check.
-- **API readiness:** PostgreSQL is reachable and the schema is compatible. Redis failure alone does not make the API globally unready. Redis-dependent features (for example distributed rate limiting or event fan-out) must use a documented bounded fallback or return a scoped `503` for the affected operation; security controls must not silently weaken.
+- **API readiness (D41):** PostgreSQL is reachable and the schema is compatible: the migration history table exists, contains no failed migration, and every migration directory shipped with the running build is recorded as applied. Applied migrations unknown to this build are tolerated for rolling deployments; rolled-back rows do not count. A missing migrations directory or incompatible/missing migration makes readiness unavailable. Redis failure alone does not make the API globally unready; Redis health is reported separately. However, Redis-dependent rate-limited operations fail closed with `503` (D45); there is no per-process rate-limit fallback.
 - **Collaboration readiness:** PostgreSQL is reachable and the instance can hydrate and durably store documents. Redis status is reported separately. In multi-instance mode, Redis outage means cross-instance live propagation is degraded; an instance must not claim multi-instance readiness for documents whose state may be stale.
 - **Dependency health:** PostgreSQL and Redis health are separate diagnostic signals, without leaking credentials or topology.
 - **Web readiness:** the web process can serve requests; it does not proxy dependency readiness as one all-or-nothing status.
@@ -453,7 +465,7 @@ Hocuspocus hook payloads use web-standard `Request`/`Headers` since v4; document
 | V4 | Redis Pub/Sub message loss, stale-document detection and feasibility of forced reconnect/resynchronization | Phase 1 spike (U3); production recovery verified in Phase 9 (U13) |
 | V5 | Token delivered in the provider's authentication message, not in the URL | Phase 1 spike / Phase 6 |
 | V6 | Provider accepts a token function for fresh tokens on reconnect | Phase 6 |
-| V7 | Next.js rewrite forwarding of `Origin`, `Host`, `X-Forwarded-*`, `Set-Cookie` | Phase 2 |
+| V7 | Next.js rewrite forwarding of `Origin`, `Host`, `X-Forwarded-*`, `Set-Cookie` | **Resolved in Phase 2** (Next.js 16.4.6, dev and `next start`): `Origin`, `Cookie`, `Content-Type`, body and `Set-Cookie` pass through; `X-Forwarded-Host` is added; **`X-Forwarded-For`/`-Proto` are not added and a client-supplied `X-Forwarded-For` passes unmodified** (§10.3) |
 | V8 | Prisma 7 + pnpm monorepo setup (generator output, driver adapter, config) | **Resolved in Phase 1a**: client generation, real adapter query, baseline migration deploy/status reported successful (U5; HANDOVER §3) |
 | V9 | Exactly which Yjs binding package the pinned Tiptap version needs (`@tiptap/y-tiptap`) | Phase 5 |
 | V10 | Applying a server-side transaction to a live document for restore | Phase 8 |
@@ -462,9 +474,9 @@ Hocuspocus hook payloads use web-standard `Request`/`Headers` since v4; document
 | V13 | Close-event codes the Hocuspocus provider surfaces for auth failures and custom closes | Phase 1 spike / Phase 6 |
 | V14 | Server-side enforcement of awareness identity (rejecting or rewriting awareness states whose user id differs from the authenticated user) | Phase 1 spike / Phase 7 |
 
-### 18.1 Hocuspocus 4.8.0 source/API inspection (not runtime verification)
+### 18.1 Hocuspocus 4.8.0 source/API inspection (distinct from runtime verification)
 
-The Phase 1b harness is prepared, but S1–S11 have not yet been executed. The following are library/API findings only and do not close the corresponding `V#` or `U#` items:
+The Phase 1b S1–S11 scenarios have since been executed; their empirical results and limitations are recorded in `docs/spikes/phase-1-collab-spike.md` and HANDOVER.md. The following bullets remain library/API capability findings, not substitutes for those runtime results or for later production-phase verification:
 
 - Configuration exposes `debounce` (default 2000 ms), `maxDebounce` (default 10000 ms), and `unloadImmediately`. The spike sets `unloadImmediately: false` so the configured store debounce can be observed.
 - Hocuspocus v4 `onStoreDocument` can run for changes not originating from WebSocket clients, including Redis replication; the Redis extension's `onChange` skips Redis-originated transactions to avoid republishing loops. S5 must still measure the resulting hook/store behaviour and duplicate-write characteristics.

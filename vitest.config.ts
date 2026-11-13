@@ -1,16 +1,22 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
+// `@/…` is the web app's source alias (apps/web/tsconfig.json paths).
+const webSrc = fileURLToPath(new URL('./apps/web/src/', import.meta.url));
+
 // Two projects (docs/TESTING.md):
-//  - unit:        *.test.ts       — no external services required
+//  - unit:        *.test.ts(x)    — no external services required
 //  - integration: *.int.test.ts   — real PostgreSQL and Redis (DATABASE_URL, REDIS_URL)
 export default defineConfig({
   test: {
     projects: [
       {
+        resolve: { alias: [{ find: /^@\//, replacement: webSrc }] },
         test: {
           name: 'unit',
           environment: 'node',
-          include: ['{apps,packages}/**/*.test.ts', 'tests/**/*.test.ts'],
+          // Component tests (*.test.tsx) opt in to jsdom with `// @vitest-environment jsdom`.
+          include: ['{apps,packages}/**/*.test.{ts,tsx}', 'tests/**/*.test.ts'],
           exclude: ['**/node_modules/**', '**/dist/**', '**/.next/**', '**/*.int.test.ts'],
         },
       },

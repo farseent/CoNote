@@ -1,7 +1,7 @@
 # CoNote – Deployment
 
-**Status:** Local Phase 1a infrastructure and service shells are implemented. PostgreSQL/Redis Compose services, baseline migrations, CI and local checks have been reported successful. Production packaging/deployment and Docker app-image build are not verified; Phase 11 remains outstanding.
-**Last updated:** 2026-11-12
+**Status:** Local Phase 1a infrastructure and service shells are implemented; Phase 2 added the authentication environment variables below (not exercised in a production deployment). PostgreSQL/Redis Compose services, baseline migrations, CI and local checks have been reported successful. Production packaging/deployment and Docker app-image build are not verified; Phase 11 remains outstanding.
+**Last updated:** 2026-11-13
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); architecture in [ARCHITECTURE.md](ARCHITECTURE.md); protocol in [WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md). The production hosting target is **unresolved (U10)**, so this document is **provider-neutral**: it defines container images, topology, configuration, operations and runbooks that work on a single VM with Docker Compose or on a managed container platform. It is finalized and executed in Phase 11 (IMPLEMENTATION_PLAN AC-11.1 … AC-11.8). Production topology, hardening and runbooks below remain plans unless explicitly identified as implemented in the Phase 1a notes above.
 
@@ -68,7 +68,7 @@ Requirements (Dockerfiles written in Phase 11, development Dockerfiles may appea
 
 ## 4. Configuration
 
-Environment variable names for shared, API, collab and web are **implemented as of Phase 1** (see `.env.example` and D40): `NODE_ENV`, `LOG_LEVEL`, `DATABASE_URL`, `REDIS_URL`, `PORT`, `APP_URL`, `ALLOWED_ORIGINS`, `COLLAB_PORT`, `API_INTERNAL_URL`. All other names below remain provisional until the phase that uses them. Values shown are the initial defaults from DECISIONS.md/WEBSOCKET_PROTOCOL.md; "—" means no default and must be set. Secrets are never committed; production secrets come from the chosen secret store (platform secrets or an encrypted env file on a VM).
+Environment variable names for shared, API, collab and web are **implemented as of Phase 1** (see `.env.example` and D40): `NODE_ENV`, `LOG_LEVEL`, `DATABASE_URL`, `REDIS_URL`, `PORT`, `APP_URL`, `ALLOWED_ORIGINS`, `COLLAB_PORT`, `API_INTERNAL_URL`, and (Phase 2) `TRUST_PROXY`, `SESSION_IDLE_TTL_DAYS`, `SESSION_ABSOLUTE_TTL_DAYS`. All other names below remain provisional until the phase that uses them. Values shown are the initial defaults from DECISIONS.md/WEBSOCKET_PROTOCOL.md; "—" means no default and must be set. Secrets are never committed; production secrets come from the chosen secret store (platform secrets or an encrypted env file on a VM).
 
 ### Shared
 
@@ -84,7 +84,7 @@ Environment variable names for shared, API, collab and web are **implemented as 
 | Variable | Purpose | Default |
 |---|---|---|
 | `APP_URL` | Public web origin (used for invitation links and Origin checks) | — |
-| `API_INTERNAL_URL` | Internal API URL used by `rewrites()` and server-side calls (D6) | — |
+| `API_INTERNAL_URL` | Internal API URL used by `rewrites()` and server-side calls (D6). **Resolved at build time for the rewrite** (`next build`; `infra/Dockerfile.web` takes it as the build argument `API_INTERNAL_URL`); the runtime value is used for server-side calls | — |
 
 ### `apps/api`
 
@@ -93,10 +93,10 @@ Environment variable names for shared, API, collab and web are **implemented as 
 | `PORT` | Listen port | `4000` |
 | `APP_URL` | Public web origin | — |
 | `ALLOWED_ORIGINS` | Origin allow-list for CSRF/CORS (D25) | `APP_URL` |
-| `TRUST_PROXY` | Proxy trust configuration (V7) | set in Phase 2 |
-| `SESSION_COOKIE_NAME` | Cookie name | `__Host-conote_session` (prod) / `conote_session` (dev) |
-| `SESSION_IDLE_TTL_DAYS` / `SESSION_ABSOLUTE_TTL_DAYS` | Session lifetimes (D5) | `7` / `30` |
-| `ARGON2_MEMORY_KIB` / `ARGON2_TIME_COST` / `ARGON2_PARALLELISM` | Argon2id parameters (D5) | `19456` / `2` / `1` (re-tuned in Phase 2) |
+| `TRUST_PROXY` | Comma-separated proxy IPs / CIDRs / `loopback` / `linklocal` / `uniquelocal` whose `X-Forwarded-For` is trusted (D43). **Production requires a reverse proxy in front of the web app that sets `X-Forwarded-For`; the web app must be reachable only through it** (ARCHITECTURE §10.3) | empty (trust none) |
+| `SESSION_IDLE_TTL_DAYS` / `SESSION_ABSOLUTE_TTL_DAYS` | Session lifetimes in days, 1–365 (D5, D42) | `7` / `30` |
+| *(not a variable)* session cookie name | `__Host-conote_session` when `NODE_ENV=production`, else `conote_session` (D42) | — |
+| *(not variables)* Argon2id parameters | Fixed in code: m = 19456 KiB, t = 2, p = 1 (ARCHITECTURE §10.1). `ARGON2_*` variables were not implemented; add them only if tuning per environment becomes necessary | — |
 | `INVITATION_TTL_DAYS` | Invitation lifetime (D30) | `7` |
 | `PAGE_PURGE_RETENTION_DAYS` | Soft-delete retention (D24) | `30` |
 | `COLLAB_PUBLIC_URL` | Collab WebSocket URL returned by `PAGE-10` | — |

@@ -174,6 +174,9 @@ AC-1.8 is met at spike level. AC-1.9 remains partial pending item-by-item review
 **Testing requirements:** `UT` (hashing, token, validation), `DB` (constraints), `API` (all endpoints), `SEC` (cookie, CSRF, enumeration, rate limit), `E2E` (register → login → protected page → logout).
 **Completion requirements:** Definition of Done; DATABASE_SCHEMA/API_CONTRACTS updated for any deviation; HANDOVER.md.
 
+**Phase 2 status (2026-11-13): implemented; awaiting owner verification and acceptance.** Evidence is in HANDOVER §7. Summary against the criteria: AC-2.1 to AC-2.5, AC-2.7 to AC-2.10 and AC-2.12 are covered by automated tests that passed in the preparation environment. **AC-2.6** is met for the API and, at HTTP level (real API + real Next.js server, redirects asserted), for web routes; the plan's *browser* E2E (Playwright, D26) was **not run** (no browser could be installed in the preparation environment), and client-side behaviour is covered by jsdom component tests instead. **AC-2.11** is met: V7 was measured and the forwarding behaviour is covered by an integration test through the real rewrite; it revealed that Next.js does not set `X-Forwarded-For` (ARCHITECTURE §10.3). Scope notes: `avatarAssetId` is deferred to Phase 4 as planned; readiness now also checks that every shipped migration is applied (D35 follow-up, D41).
+
+
 ---
 
 ## Phase 3 – Workspaces, Pages and Permissions

@@ -1,9 +1,7 @@
 # CoNote – Technical Decisions
 
-**Status:** Phase 1a infrastructure verification is complete based on owner-reported evidence. Phase 1b collaboration spike S1–S11 executed successfully (11/11 PASS); root `pnpm check` passed on 2026-11-12 (9 test files, 59 tests). The project owner approved U1 (Node.js 24) and U2 (TypeScript 5.9.3). U3 and U4 remain partially evidenced; U13 remains unresolved. Final cross-document reconciliation and owner review are in progress. Phase 2 remains blocked until the owner explicitly approves Phase 1 closure.
-
-**Last updated:** 2026-11-12
-
+**Status:** Phase 1 infrastructure implemented and Phase 1b spike executed; Phase 2 authentication and user management implemented and locally verified. D41–D47 explicitly accepted by the project owner on 2026-11-13. Phase 2 GitHub Actions CI was deliberately deferred by the owner and is not recorded as passed. Evidence and remaining limitations are tracked in HANDOVER.md.
+**Last updated:** 2026-11-13
 **Owner:** Project owner (approvals) / Claude (drafting)
 
 This is the permanent decision register for CoNote. Decision IDs (`D#`) and unresolved-question IDs (`U#`) are **permanent**: they are never renumbered or reused. A changed decision is recorded by adding a new decision that supersedes the old one and updating the old one's status.
@@ -14,7 +12,7 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 |---|---|
 | **Accepted** | Explicitly approved by the project owner. |
 | **Accepted (requirement)** | Stated by the project owner as a project requirement. |
-| **Proposed** | Drafted as a working plan but not explicitly approved by the project owner. It remains a proposal unless approval is recorded. |
+| **Proposed** | Drafted during Phase 0 and included in the Phase 0 package. Treated as the working plan unless the owner changes it. |
 | **Unresolved** | Not yet decided. Listed in the "Unresolved decisions" section. |
 | **Superseded** | Replaced by a later decision (none yet). |
 
@@ -62,6 +60,13 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 | D38 | Collab shell accepts the WebSocket handshake but rejects every document connection | Proposed (Phase 1) |
 | D39 | Tooling versions pinned beyond D11–D13 | Proposed (Phase 1) |
 | D40 | Environment validation scope and rules | Proposed (Phase 1) |
+| D41 | Readiness verifies that every shipped migration is applied (completes D35) | Accepted (owner approval, 2026-11-13) |
+| D42 | Session configuration: day-based TTL variables; cookie name derived from `NODE_ENV` | Accepted (owner approval, 2026-11-13) |
+| D43 | `TRUST_PROXY` is a list of trusted proxy addresses; V7 result and production proxy requirement | Accepted (owner approval, 2026-11-13) |
+| D44 | Authentication runs in `preValidation`, after the rate limiter | Accepted (owner approval, 2026-11-13) |
+| D45 | Rate-limit scopes, initial values and fail-closed behaviour | Accepted (owner approval, 2026-11-13) |
+| D46 | Web authentication architecture (server guards, client state, tests) | Accepted (owner approval, 2026-11-13) |
+| D47 | Phase 2 dependencies and the release-age gate | Accepted (owner approval, 2026-11-13) |
 
 ---
 
@@ -76,7 +81,7 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 - **Consequences:**
   - Hocuspocus is Yjs-compatible. **Wire compatibility with the plain `y-websocket` client is not assumed or required.** The client must use `HocuspocusProvider`.
   - Hocuspocus 4 requires Node.js >= 22 (from package metadata) and uses web-standard `Request`/`Headers` objects in hooks.
-  - If later implementation or production validation shows Hocuspocus is unsuitable, the fallback is a custom server on `y-protocols` (recorded as a new decision that supersedes D1).
+  - If Hocuspocus proves unsuitable in the Phase 1 spike, the fallback is a custom server on `y-protocols` (recorded as a new decision that supersedes D1).
 - **References:** Hocuspocus docs (hooks, authentication, Redis); `y-websocket` and `y-redis` READMEs. See ARCHITECTURE.md §17.
 
 ### D2 – Multi-instance sync: Redis fan-out
@@ -89,7 +94,7 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
   - **All messages are handled on all instances**, so adding instances behind Redis adds connection capacity and availability, not CPU relief per document.
   - When a document is loaded on one instance while open on another, the load waits for the other instance's current state, bounded by `awaitInitialSyncTimeout` (default 1000 ms).
   - Storing a document is mutually exclusive across instances (an instance that is storing a document blocks the others).
-- **Consequences:** The Phase 1b spike exercised cross-instance synchronization, persistence, Redis-originated updates, awareness and a Redis outage (S1–S7). S7 showed that restarting Redis alone does not make already-open documents reconverge; both collab servers had to restart and rehydrate from PostgreSQL. Remaining persistence and awareness limitations are tracked under U3/U4, and the explicit Phase 9 recovery mechanism remains U13. The spike is evidence, not a production recovery implementation.
+- **Consequences:** Behaviour under Redis failure, duplicate persistence and awareness propagation must be verified in the Phase 1 spike (U3, U4) before Phase 6 relies on it.
 - **References:** Hocuspocus Redis extension docs. See ARCHITECTURE.md §9.
 
 ### D3 – Separate API service
@@ -148,12 +153,12 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 
 - **Status:** Accepted
 - **Decision:** Images are stored in **S3-compatible object storage**: MinIO for local development if practical; an S3-compatible provider in production. Image storage sits behind a **storage adapter interface** in `apps/api` so it stays modular. Images are never stored in PostgreSQL.
-- **Consequences:** Upload flow, limits, allowed types and confirmation of MinIO distribution/licensing are tracked in U7. Confirm the local-development storage option before implementing image storage in Phase 4 (D37).
+- **Consequences:** Upload flow, limits and allowed types are U7. MinIO distribution/licensing status must be re-checked in Phase 1.
 
 ### D28 – Roadmap structure
 
 - **Status:** Accepted
-- **Decision:** Keep Phases 0–11. Phase 1 includes a **small disposable two-instance Hocuspocus + Redis + PostgreSQL proof of concept** that tests cross-instance sync, awareness propagation, persistence and failure/recovery behaviour, and records the results and architectural implications. The Phase 1b spike is complete (S1–S11, 11/11 PASS), but it is evidence rather than a production collaboration implementation. S7 showed that Redis restart alone does not reconverge already-open documents; explicit recovery remains a Phase 9 requirement (U13). The complete collaboration feature is **not** built in Phase 1. **Phases 5 and 6 remain separate.**
+- **Decision:** Keep Phases 0–11. Phase 1 includes a **small disposable two-instance Hocuspocus + Redis + PostgreSQL proof of concept** that verifies cross-instance sync, awareness propagation, and persistence and recovery, and records the results and architectural implications. The complete collaboration feature is **not** built in Phase 1. **Phases 5 and 6 remain separate.**
 - **Consequences:** See IMPLEMENTATION_PLAN.md Phase 1 and Phase 5/6 boundaries.
 
 ---
@@ -197,15 +202,15 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 
 - **Status:** Proposed
 - **Context:** Storing the full document on every keystroke is explicitly rejected. Hocuspocus's Redis extension serializes stores across instances.
-- **Decision (baseline design; partially evaluated by the Phase 1b spike):**
-  1. **`DocumentUpdate`** – append-only rows holding **incremental** Yjs update binaries (diffs), ordered by a monotonically increasing sequence.
+- **Decision (baseline design, to be validated by the Phase 1 spike):**
+  1. **`DocumentUpdate`** – append-only rows holding *incremental* Yjs update binaries (diffs), ordered by a monotonically increasing sequence.
   2. **`DocumentState`** – one row per page holding the **compacted full state** (`foldedState`), the **persisted state vector** (coverage of the folded state plus all stored updates), and the highest update sequence folded into it (`foldedSeq`). It is also the per-page lock row.
   3. **`DocumentSnapshot`** – immutable full-state versions for version history (manual, automatic and pre-restore).
   4. **Write path:** on the collab server's debounced store hook, compute the diff between the live `Y.Doc` and the **last persisted state vector** and append it as one `DocumentUpdate` row. Never write the whole document per edit.
   5. **Compaction:** merge updates into `DocumentState` and delete the folded rows in one transaction, when a threshold is exceeded or a document unloads.
   6. **Recovery:** load `DocumentState`, apply `DocumentUpdate` rows with a higher sequence, in order.
 - **Initial tunables (not performance claims; adjusted using spike and Phase 9 measurements):** store debounce 2000 ms, max debounce 10000 ms (Hocuspocus defaults, to be confirmed), compaction after 200 update rows or on unload.
-- **Consequences:** Models and columns are specified in DATABASE_SCHEMA.md; guarantees G2–G4 are specified in ARCHITECTURE.md. Phase 1b S4/S5 provided evidence for incremental persistence, PostgreSQL reload and Redis-originated update handling. Store-on-unload and direct concurrent row-lock behaviour remain unverified under U3. Authorship tracking is through `ActivityLog` (see ARCHITECTURE.md §13).
+- **Consequences:** Models and columns in DATABASE_SCHEMA.md; guarantees G2–G4 in ARCHITECTURE.md; open verification items U3. Authorship tracking is through `ActivityLog` (see ARCHITECTURE.md §13).
 
 ### D16 – Node.js 24 LTS baseline
 
@@ -271,9 +276,7 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
   3. The override for U on the nearest ancestor page (walking `parentId` upwards).
   4. U's workspace role mapped to the same-named page capability (`EDITOR`, `COMMENTER`, `VIEWER`).
   5. Otherwise no access.
-
   `NONE` denies access. Non-members of the workspace never have access (external guests are out of scope, U9).
-
 - **Capabilities** (capability matrix in PROJECT_MASTER.md §5): `VIEWER` reads; `COMMENTER` reads and comments; `EDITOR` reads, comments, edits, creates child pages, moves and deletes pages; `ADMIN`/`OWNER` additionally manage members, invitations, page permissions and workspace settings (only `OWNER` deletes the workspace or transfers ownership). Only the `OWNER` may grant or revoke `ADMIN`; Admins manage Editor/Commenter/Viewer members and may remove only non-Admin members.
 - **Consequence:** The resolution function lives in `packages/shared` as a pure function and is unit-tested exhaustively; API and collab both call it.
 
@@ -323,7 +326,7 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 
 ### D33 – Phase 1 delivered in two parts; collaboration spike deferred (Phase 1b)
 
-`docs/IMPLEMENTATION_PLAN.md` Phase 1 includes a disposable collaboration spike (S1–S11, AC-1.8–1.10) and the resolution/qualification of U3/U4/V1–V6/V11–V14. The owner's original Phase 1 task list covered infrastructure only, so delivery was split into Phase 1a and Phase 1b. **Phase 1a infrastructure verification is complete based on owner-reported evidence in HANDOVER.md. Phase 1b has now been executed: S1–S11 passed (11/11), and root `pnpm check` passed on 2026-11-12 (9 test files, 59 tests).** U1 and U2 were explicitly approved by the owner on 2026-11-12. U3/U4 remain partially evidenced, and the outstanding limitations and documentation reconciliation are recorded in HANDOVER.md and `docs/spikes/phase-1-collab-spike.md`. Phase 1 closure has not yet been approved. **Do not start Phase 2 until the owner has reviewed the evidence and explicitly approved Phase 1 closure.**
+`docs/IMPLEMENTATION_PLAN.md` Phase 1 includes a disposable collaboration spike (S1–S11, AC-1.8–1.10) and the resolution/qualification of U3/U4/V1–V6/V11–V14. The owner's original Phase 1 task list covered infrastructure only, so delivery was split into Phase 1a and Phase 1b. **Phase 1a is complete based on the owner-reported evidence in HANDOVER.md; Phase 1b remains outstanding. The owner has explicitly chosen to run Phase 1b before Phase 2.** Phase 2 must not start until the spike is completed, its results reviewed, and the owner separately approves Phase 2.
 
 ### D34 – Operational endpoints return plain JSON with a `service` field
 
@@ -331,7 +334,7 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 
 ### D35 – Baseline migration is empty; readiness "schema-compatible" definition
 
-`packages/db/prisma/schema.prisma` has no models in Phase 1 (the first models, User and Session, arrive in Phase 2). One baseline migration (`20261111000000_baseline`, SQL `SELECT 1;`) exists so that `prisma migrate deploy` has something to apply and the migration pipeline can be exercised in CI before real schema exists. "Schema-compatible" in readiness currently means: `_prisma_migrations` exists and contains no failed (unfinished, not rolled back) migration. It does **not** compare applied migrations with the migrations the running build expects; that must be added once real models exist (Phase 2).
+`packages/db/prisma/schema.prisma` has no models in Phase 1 (the first models, User and Session, arrive in Phase 2). One baseline migration (`20261111000000_baseline`, SQL `SELECT 1;`) exists so that `prisma migrate deploy` has something to apply and the migration pipeline can be exercised in CI before real schema exists. "Schema-compatible" in readiness currently means: `_prisma_migrations` exists and contains no failed (unfinished, not rolled back) migration. It does **not** compare applied migrations with the migrations the running build expects; that must be added once real models exist (Phase 2). **Completed in Phase 2 by D41.**
 
 ### D36 – Internal packages compile to `dist`
 
@@ -353,6 +356,42 @@ Exact pins added: ESLint 10.14.0, `@eslint/js` 10.0.1, typescript-eslint 8.72.2 
 
 Zod schemas live in `@conote/shared` (`apiEnvSchema`, `collabEnvSchema`, `webEnvSchema`, `dbEnvSchema`); `parseEnv(scope, schema, source)` is pure. Each process validates at startup and exits non-zero on failure. Error messages list variable names and reasons only, never values. Only variables used by the current phase are validated; later phases add theirs with their code. `NODE_ENV` has no default and must be set. Web validates in `instrumentation.ts` at server start.
 
+### D41 – Readiness verifies that every shipped migration is applied (completes D35)
+
+- **Status:** Accepted (owner approval, 2026-11-13; Option A)
+D35 deferred this to Phase 2: "schema-compatible" is now the migration history table existing, containing no failed migration, **and containing every migration directory shipped with this build** (`packages/db/prisma/migrations`, read at runtime relative to the package; `prisma` is in the package's `files`, so `pnpm deploy` images include it). Applied migrations that this build does not know (a newer schema during a rolling deploy) are tolerated; rolled-back rows do not count as applied. A missing migrations directory makes readiness `unavailable` rather than silently skipping the check. `checkDatabase` accepts `expectedMigrations` for tests.
+
+### D42 – Session configuration: day-based TTL variables; cookie name derived from `NODE_ENV`
+
+- **Status:** Accepted (owner approval, 2026-11-13; proposed configuration)
+The session lifetimes are `SESSION_IDLE_TTL_DAYS` (default 7, 1–365) and `SESSION_ABSOLUTE_TTL_DAYS` (default 30, 1–365), the provisional names listed in DEPLOYMENT.md. The cookie name is not configurable: `__Host-conote_session` when `NODE_ENV=production`, otherwise `conote_session` (the `__Host-` prefix requires `Secure`, which browsers refuse over plain HTTP outside localhost). `SESSION_COOKIE_NAME` from the earlier DEPLOYMENT.md draft is therefore not used. The `Secure` attribute follows `NODE_ENV=production`. Consequence for the optional Compose `apps` profile, which runs production mode over plain `http://localhost:3000`: whether a browser stores a `Secure` / `__Host-` cookie from an `http://localhost` origin differs between browsers (Safari is commonly reported to refuse it). **This was not tested**; if sign-in appears to succeed but the next page shows the login page, check this first, or run the apps profile behind HTTPS.
+
+### D43 – `TRUST_PROXY` is a list of trusted proxy addresses; V7 result and production proxy requirement
+
+- **Status:** Accepted (owner approval, 2026-11-13; Option A)
+`TRUST_PROXY` is a comma-separated list of IPs, CIDR ranges or the keywords `loopback`, `linklocal`, `uniquelocal` (empty = trust none, the default). A boolean or a hop count was rejected: Fastify 5.12 deliberately ignores numeric values (it cannot validate the immediate peer), and `true` would trust a client-supplied left-most entry. With an address list the client address is the first untrusted entry from the right, and `X-Forwarded-For` from an untrusted peer is ignored (both tested). **V7 was measured** (ARCHITECTURE §10.3): Next.js 16.4.6 forwards `Origin`, `Cookie`, `Content-Type`, the body and `Set-Cookie` but **does not set `X-Forwarded-For`/`X-Forwarded-Proto` and passes a client-supplied `X-Forwarded-For` through unmodified.** Hence production needs a reverse proxy in front of the web app that sets `X-Forwarded-For`, with the web app reachable only through it. Without it IP-based rate limits are either shared by all clients (nothing trusted) or forgeable (web tier trusted). This is a deployment requirement, not something the application can fix; per-account limits are unaffected.
+
+### D44 – Authentication runs in `preValidation`, after the rate limiter
+
+- **Status:** Accepted (owner approval, 2026-11-13; Option A)
+Fastify validates the body before `preHandler`, so a `preHandler` guard returned `400` to unauthenticated callers (found by the Phase 2 tests). The guard is a `preValidation` hook: order is Origin/Content-Type check and rate limiter (`onRequest`) → body parsing → authentication → validation → handler. Unauthenticated callers always get `401`; unauthenticated work is bounded by the rate limiter and the 64 KiB body limit.
+
+### D45 – Rate-limit scopes, initial values and fail-closed behaviour
+
+- **Status:** Accepted (owner approval, 2026-11-13; Option A)
+Per-IP limits use `@fastify/rate-limit` per route (`global: false`); account-scoped limits (login per email, password change per user) call the plugin's `createRateLimit` with a non-IP key and the same Redis store. Values are in API_CONTRACTS §3.1 and in `apps/api/src/config.ts` (`DEFAULT_RATE_LIMITS`); they are **untuned starting points**, not measured. All attempts count (including successful logins), so an exceeded per-email limit also refuses the correct password for the window; the cost is that someone who knows an email can block password login for that account for up to 15 minutes. If Redis is unreachable every rate-limited endpoint returns `503` (fail closed; no per-process fallback was approved). A Redis outage therefore also blocks authenticated requests, because the general limit applies to them.
+
+### D46 – Web authentication architecture
+
+- **Status:** Accepted (owner approval, 2026-11-13; Option A)
+Protected pages call `requireUser()` (server component, asks the API with the forwarded cookie); the `(app)` layout does too, but layouts are not re-run on client navigation, so each page repeats the check. A failed lookup other than `401` (API down) throws to the error page rather than showing the login page. The root layout seeds a client `AuthProvider` with the user; actions go through `/api/v1/*` same-origin, and any `UNAUTHENTICATED` answer signs the UI out and returns to `/login`. No `next`/return-URL parameter (avoids open-redirect handling) and no Next.js middleware/proxy file. Only the public profile is held in client state; the session token is never readable by scripts. Frontend flows are tested with jsdom component tests plus an HTTP-level test of the real Next.js server; **browser E2E (Playwright, D26) is not yet implemented**.
+
+### D47 – Phase 2 dependencies and the release-age gate
+
+- **Status:** Accepted (owner approval, 2026-11-13; proposed dependency set)
+`apps/api`: `argon2` 0.45.2 (native; added to `allowBuilds`), `@fastify/cookie` 11.1.5, `@fastify/cors` 11.4.1, `@fastify/helmet` 13.2.0, `@fastify/rate-limit` 11.2.2, `fastify-type-provider-zod` 7.0.0, `zod` 4.6.7. `apps/web` dev-only: `jsdom` 30.1.3, `@testing-library/react` 16.3.3, `@testing-library/dom` 10.4.2, `@testing-library/user-event` 14.6.8. `user-event` 14.6.10 (published 2026-11-12) and a first `jsdom` 31.0.0 (2026-11-05, a new major) were not used: pnpm had added a `minimumReleaseAgeExclude` entry for 14.6.10, which was removed in favour of an older version, consistent with D39. No package is excluded from the gate. Engines were checked against Node 24.
+
+
 ## Unresolved decisions
 
 The "Needed by" column states the phase gate for each item. Resolved items remain listed with their evidence so permanent IDs are preserved.
@@ -362,15 +401,15 @@ The "Needed by" column states the phase gate for each item. Resolved items remai
 | **U1 – RESOLVED (Phase 1b, 2026-11-12)** | Node.js baseline: 24 or 26? | Node.js 24 or Node.js 26 | Node.js 24 LTS approved by the project owner on 2026-11-12; used for the Phase 1b spike and root checks. See D16 and HANDOVER. | Phase 1 |
 | **U2 – RESOLVED (Phase 1b, 2026-11-12)** | TypeScript version: 5.9.3 or newer (6.x/7.x)? | TypeScript 5.9.3 or newer | TypeScript 5.9.3 approved by the project owner on 2026-11-12; used for the Phase 1b spike and root checks. See D17 and HANDOVER. | Phase 1 |
 | **U3 – PARTIALLY EVIDENCED (Phase 1b, 2026-11-12)** | Do Hocuspocus store hooks and Redis behave as the persistence design (D15) assumes? Consider debounce options, store-on-unload, Redis-originated updates, duplicate writes and lock behaviour. | Diff-on-store; per-update append from change hook with origin filtering | S4 and S5 verified persistence, Redis-originated updates and duplicate-write behaviour. Store-on-unload and direct concurrent row-lock behaviour remain unverified. | Phase 1 closure / Phase 9 |
-| **U4 – PARTIALLY EVIDENCED (Phase 1b, 2026-11-12)** | Do awareness updates propagate across instances and from read-only connections, and what happens to stale awareness after an instance crash? | Empirical verification | S2, S3 and S10 verified cross-instance awareness, read-only awareness propagation and forged identity rejection. Stale awareness after server crash and name/color tampering remain unverified. | Phase 1 closure / Phase 6 |
-| **U6** | Invitation email delivery provider | SMTP via Mailpit in development with production provider TBD; transactional email API | Phase 3 ships link-based invitations plus an email-adapter interface (console/Mailpit for development); choose a production provider before Phase 11. | Phase 3 (link only) / Phase 11 (provider) |
-| **U7** | Image upload flow and limits | Presigned direct upload to object storage; upload through the API | Use presigned uploads with server-side validation of type and size limits; set exact limits in Phase 4. Confirm MinIO's current distribution/licensing before selecting it for local development. | Phase 4 |
-| **U8** | Behaviour of comment anchors after version restore (D8 + D9) | Mark affected threads detached (kept, unanchored); attempt re-anchoring by quoted text | Mark detached, keep thread and quoted text; re-anchoring is a later enhancement. | Phase 8 |
-| **U9** | External guests (access to a single page for non-members) | Out of scope for MVP; or add later | Out of scope; revisit after Phase 10. | Phase 3 (confirm out of scope) |
-| **U10** | Production hosting target | Single VM with Docker Compose; managed container platform with managed PostgreSQL/Redis | DEPLOYMENT.md is provider-neutral (container images and reference topology); owner picks a target before Phase 11. | Phase 11 |
-| **U11** | Retention policy for AUTO snapshots and activity logs | Keep all; prune AUTO snapshots by age/count while always keeping MANUAL and PRE_RESTORE; time-based activity pruning | Keep MANUAL and PRE_RESTORE indefinitely, prune AUTO snapshots by a policy chosen from Phase 9 growth measurements; review activity-log retention in Phase 10. | Phase 8 (snapshot rules) / Phase 10 (implementation) |
-| **U12** | Repository license and visibility (public/private) | Permissive open-source license; all rights reserved/private | Owner decides; until decided the repository states "License: not yet chosen". | Before the repository is made public (no later than Phase 11) |
-| **U13** | Which explicit Phase 9 recovery mechanism detects and reconciles documents after Redis Pub/Sub message loss? | Force clients to reconnect to PostgreSQL-hydrated state, or implement verified server-to-server reconciliation. Redis reconnect alone is insufficient. | Select and verify the mechanism in Phase 9 using the Phase 1b evidence; forced reconnect is the conservative baseline. | Phase 9 |
+| **U4 – PARTIALLY EVIDENCED (Phase 1b, 2026-11-12)** | Do awareness updates propagate across instances and from read-only connections, and what happens to stale awareness after an instance crash? | Empirical verification | S2, S3 and S10 verified cross-instance awareness, read-only awareness propagation and forged identity rejection. Stale awareness after server crash and name/color tampering remain unverified. | Phase 1 closure |
+| **U6** | Invitation email delivery provider | SMTP via Mailpit in dev + provider TBD in prod; transactional email API | Phase 3 ships **link-based** invitations plus an email-adapter interface (console/Mailpit for dev); pick a production provider before Phase 11 | Phase 3 (link only) / Phase 11 (provider) |
+| **U7** | Image upload flow and limits | Presigned direct upload to object storage; upload through the API | Presigned upload with server-side validation of type and size limits; exact limits to be set in Phase 4. Also confirm MinIO's current distribution/licensing for local dev | Phase 4 |
+| **U8** | Behaviour of comment anchors after version restore (D8 + D9) | Mark affected threads "detached" (kept, unanchored); attempt re-anchoring by quoted text | Mark detached, keep thread and quoted text; re-anchoring is a later enhancement | Phase 8 |
+| **U9** | External guests (access to a single page for non-members) | Out of scope for MVP; or add later | Out of scope; revisit after Phase 10 | Phase 3 (confirm out of scope) |
+| **U10** | Production hosting target | Single VM with Docker Compose; managed container platform + managed Postgres/Redis | DEPLOYMENT.md is written provider-neutral (container images + reference topology); owner picks a target before Phase 11 | Phase 11 |
+| **U11** | Retention policy for AUTO snapshots and activity logs | Keep all; prune AUTO snapshots by age/count while always keeping MANUAL and PRE_RESTORE; time-based activity pruning | Keep MANUAL and PRE_RESTORE indefinitely, prune AUTO snapshots by a policy chosen from Phase 9 growth measurements; activity logs kept until Phase 10 review | Phase 8 (snapshot rules) / Phase 10 (implementation) |
+| **U12** | Repository license and visibility (public/private) | Permissive open-source license; all rights reserved/private | Owner decides; until decided the repository states "License: not yet chosen" | Before the repository is made public (no later than Phase 11) |
+| **U13** | Which explicit Phase 9 recovery mechanism detects and reconciles documents after Redis Pub/Sub message loss? Options: force clients to reconnect to PostgreSQL-hydrated state, or implement verified server-to-server reconciliation. Redis reconnect alone is insufficient. | Select from Phase 1/9 evidence; forced reconnect is the conservative baseline | Phase 9 |
 
 ---
 

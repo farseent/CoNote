@@ -1,5 +1,11 @@
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { AppError, errorEnvelope, type ErrorCode } from '@conote/shared';
+import {
+  hasZodFastifySchemaValidationErrors,
+  isResponseSerializationError,
+} from 'fastify-type-provider-zod';
+import { isDatabaseUnavailableError } from '@conote/db';
+import { AppError, errorEnvelope, type ErrorCode, type ErrorDetail } from '@conote/shared';
+import { isRedisUnavailableError } from './redis.js';
 
 const STATUS_TO_CODE: Partial<Record<number, ErrorCode>> = {
   400: 'VALIDATION_ERROR',
@@ -31,6 +37,16 @@ const CLIENT_MESSAGES: Record<ErrorCode, string> = {
   SERVICE_UNAVAILABLE: 'A required service is unavailable.',
 };
 
+/** `/body/email` → `email`; the message comes from the schema and never echoes input values. */
+function toDetails(
+  validation: readonly { instancePath: string; message?: string | undefined }[],
+): ErrorDetail[] {
+  return validation.map((issue) => ({
+    path: issue.instancePath.replace(/^\//, '').replace(/\//g, '.'),
+    message: issue.message ?? 'Invalid value.',
+  }));
+}
+
 /**
  * Standard error envelope for every failure (docs/API_CONTRACTS.md §1, D31).
  * Unexpected errors are logged with their cause and returned as a generic
@@ -47,6 +63,43 @@ export function registerErrorHandling(app: FastifyInstance): void {
             message: error.message,
             requestId: request.id,
             ...(error.details ? { details: error.details } : {}),
+          }),
+        );
+      }
+
+      if (hasZodFastifySchemaValidationErrors(error)) {
+        request.log.info({ code: 'VALIDATION_ERROR' }, 'request rejected');
+        return reply.code(400).send(
+          errorEnvelope({
+            code: 'VALIDATION_ERROR',
+            message: CLIENT_MESSAGES.VALIDATION_ERROR,
+            requestId: request.id,
+            details: toDetails(error.validation),
+          }),
+        );
+      }
+
+      if (isDatabaseUnavailableError(error) || isRedisUnavailableError(error)) {
+        request.log.warn(
+          { err: { name: error.name, message: error.message } },
+          'dependency unavailable',
+        );
+        return reply.code(503).send(
+          errorEnvelope({
+            code: 'SERVICE_UNAVAILABLE',
+            message: CLIENT_MESSAGES.SERVICE_UNAVAILABLE,
+            requestId: request.id,
+          }),
+        );
+      }
+
+      if (isResponseSerializationError(error)) {
+        request.log.error({ err: error }, 'response did not match its schema');
+        return reply.code(500).send(
+          errorEnvelope({
+            code: 'INTERNAL_ERROR',
+            message: CLIENT_MESSAGES.INTERNAL_ERROR,
+            requestId: request.id,
           }),
         );
       }

@@ -47,6 +47,24 @@ const httpUrl = z
     }
   }, 'must be an http(s) URL');
 
+const PROXY_KEYWORDS = new Set(['loopback', 'linklocal', 'uniquelocal']);
+const IP_OR_CIDR = /^[0-9a-fA-F:.]+(\/\d{1,3})?$/;
+
+const trustedProxies = z
+  .string()
+  .default('')
+  .transform((value) =>
+    value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry !== ''),
+  )
+  .refine((entries) => entries.every((e) => PROXY_KEYWORDS.has(e) || IP_OR_CIDR.test(e)), {
+    error: 'must be a comma-separated list of IPs, CIDR ranges, loopback, linklocal or uniquelocal',
+  });
+
+const days = (defaultDays: number) => z.coerce.number().int().min(1).max(365).default(defaultDays);
+
 const nodeEnv = z.enum(['development', 'test', 'production']);
 const logLevel = z.enum(LOG_LEVELS).default('info');
 
@@ -59,6 +77,17 @@ export const apiEnvSchema = z
     PORT: port(4000),
     APP_URL: httpOrigin,
     ALLOWED_ORIGINS: z.string().optional(),
+    /**
+     * Addresses of reverse proxies whose `X-Forwarded-For` is trusted: comma-separated
+     * IPs, CIDR ranges or the keywords `loopback`, `linklocal`, `uniquelocal`. Empty (the
+     * default) trusts none. The client address is the first untrusted entry from the right,
+     * so a client-supplied left-most entry is ignored and a direct client cannot spoof it.
+     */
+    TRUST_PROXY: trustedProxies,
+    /** Idle (sliding) session lifetime; docs/DECISIONS.md D5 (7 days). */
+    SESSION_IDLE_TTL_DAYS: days(7),
+    /** Absolute session lifetime; docs/DECISIONS.md D5 (30 days). */
+    SESSION_ABSOLUTE_TTL_DAYS: days(30),
   })
   .transform((env) => ({
     ...env,

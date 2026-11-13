@@ -1,6 +1,6 @@
 # CoNote – Real-Time Collaborative Workspace
 
-> **Project status: Phase 1 (project setup and infrastructure) complete except the collaboration spike.** The monorepo, tooling, local infrastructure, health endpoints and CI exist. **No product feature (authentication, workspaces, editor, collaboration, comments, versions) is implemented yet**; everything under "Planned features" is the *plan*. Current status: `docs/HANDOVER.md`.
+> **Project status: Phase 1 (infrastructure) and Phase 2 (authentication and user management) are implemented; Phase 2 is awaiting owner verification.** You can register, sign in, sign out, edit your profile, change your password and manage your signed-in sessions. **No other product feature (workspaces, pages, editor, collaboration, comments, versions) is implemented yet**; everything under "Planned features" is the *plan*. Current status: `docs/HANDOVER.md`.
 
 CoNote is a collaborative workspace inspired by Notion and Figma. Multiple people will be able to edit the same rich-text page at the same time, see each other's cursors and presence, discuss content in comment threads, and browse or restore earlier versions, without losing concurrent changes.
 
@@ -72,7 +72,7 @@ conote/
 └── CLAUDE.md       # Permanent instructions for AI-assisted development
 ```
 
-The packages and apps exist as Phase 1 foundations only: `shared` holds env validation, error codes, the response envelope and health types; `db` holds the Prisma setup (no models yet); `editor` is an empty entry point; `web`, `api` and `collab` are shells with health endpoints.
+`shared` holds env validation, error codes, the response envelope, health types and the authentication schemas; `db` holds the Prisma setup with the `User` and `Session` models; `editor` is an empty entry point; `api` serves the authentication and profile endpoints (`/api/v1/auth/*`, `/api/v1/users/me`); `web` has the sign-in, registration and profile pages and proxies `/api/*` to the API; `collab` is still a shell with health endpoints.
 
 ## Prerequisites and setup
 

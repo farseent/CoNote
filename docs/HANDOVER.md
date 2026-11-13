@@ -1,10 +1,10 @@
 # CoNote – Handover
 
-**Last updated:** 2026-11-12
+**Last updated:** 2026-11-13
 
-**Current phase:** Phase 1 – Project Setup and Infrastructure. **Phase 1a infrastructure verification is complete based on owner-reported evidence. Phase 1b S1–S11 have now been executed successfully (11/11 PASS). Root pnpm check also passed after the spike changes on 2026-11-12 (9 test files, 59 tests). The owner explicitly approved U1 (Node.js 24) and U2 (TypeScript 5.9.3). Final cross-document reconciliation and owner review of remaining limitations are in progress.** The owner selected Phase 1b before Phase 2 (D33).
+**Current phase:** Phase 2 – Authentication and User Management. **Implementation and owner-run local acceptance checks are complete (2026-11-13, §7.9). D41–D47 are explicitly accepted. Final Phase 2 sign-off remains pending; GitHub Actions CI for Phase 2 was explicitly deferred by the owner and has not been run.** The owner issued the Phase 2 task on 2026-11-13; that instruction was treated as approval to start Phase 2 although the earlier formal Phase 1 closure sign-off (§4) was not recorded in the repository. The Phase 1 historical items listed as open in §1 remain open.
 
-**Next phase after the current task:** Phase 2 – Authentication and User Management. **Not started and blocked** until Phase 1 closure is explicitly approved by the owner after reviewing the reconciled Phase 1b evidence.
+**Next phase after acceptance:** Phase 3 – Workspaces, Pages and Permissions. **Not started.** Do not start Phase 3 until the owner gives final Phase 2 sign-off and the deferred CI decision is resolved.
 
 Read `CLAUDE.md` first. This file is the source of truth for current project status.
 
@@ -16,23 +16,23 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 
 | Repository | pnpm monorepo with `apps/web`, `apps/api`, `apps/collab`, `packages/db`, `packages/shared`, `packages/editor`; root scripts, CI, Dockerfiles and local Compose configuration are present |
 
-| Product features | None implemented yet: no authentication, workspaces, page management, rich-text editor, production Yjs collaboration, presence, comments or version history |
+| Product features | **Implemented (Phase 2): registration, login, logout, DB-backed sessions, session list/revoke, password change, profile (display name, presence colour) with web pages.** Not implemented: workspaces, page management, rich-text editor, production Yjs collaboration, presence, comments, version history, avatars (Phase 4), email verification, password reset |
 
-| API | Fastify foundation and operational `/health` and `/ready` endpoints implemented |
+| API | Fastify foundation, `/health` and `/ready`, and (Phase 2) `AUTH-01`–`AUTH-07`, `USER-01`–`USER-02` under `/api/v1`, with CSRF checks, rate limiting, helmet, CORS, session cleanup job |
 
 | Collaboration server | Hocuspocus shell and operational endpoints implemented. It deliberately rejects every document connection; this is not a working collaboration service (D38) |
 
-| Database | Prisma 7.10.1 configured with an intentionally empty baseline migration. No application models or production document persistence exist |
+| Database | Prisma 7.10.1; baseline migration plus `20261112120000_auth_users_sessions` (`User`, `Session`). That migration is hand-written SQL. The owner's local `migrate deploy`, `migrate status` and scratch-database `migrate:dev` drift check were clean on 2026-11-13 (§7.9). No document persistence exists |
 
 | Local infrastructure | PostgreSQL 17 and Redis 7 Compose services reported healthy. PostgreSQL host port 5433 maps to container port 5432; Redis host port 6379 |
 
 | Phase 1a verification | Owner reports `pnpm check` passed, 59 tests passed (47 unit + 12 integration), migrations deployed and up to date, Docker Compose PostgreSQL/Redis healthy, GitHub Actions CI passed, and the web shell was checked in a browser |
 
-| Docker app images | **Not verified**: do not infer that the optional `--profile apps` image build passed from the successful Compose infrastructure startup |
+| Docker app images | **Verified by owner on 2026-11-13:** API, web, collab and migration images built successfully; Compose `apps` profile started all application services; migration container exited 0 with no pending migrations; API `/ready` returned HTTP 200 with PostgreSQL and Redis healthy |
 
 | Phase 1b spike | Harness and report at `spikes/collab-poc/` and `docs/spikes/phase-1-collab-spike.md`; S1–S11 executed, 11/11 PASS. Root `pnpm check` passed; remaining evidence reconciliation and owner review are in progress |
 
-| Phase 2 | Not started; blocked until Phase 1 closure and explicit owner approval |
+| Phase 2 | Implemented and owner-verified locally. Lint, format check and typecheck passed; 228 tests passed with `--testTimeout=20000`; migration deploy/status and scratch-database drift check passed; browser acceptance checks completed; current-session indicator fixed; Docker app images built and services started; API `/ready` returned HTTP 200 with PostgreSQL and Redis healthy. D41–D47 accepted. **GitHub Actions CI for Phase 2 deliberately deferred and not run. Final owner sign-off pending.** |
 
 ### Decisions and open items
 
@@ -50,6 +50,7 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 
 - **U13:** Explicit production recovery after Redis Pub/Sub message loss remains a Phase 9 decision. Redis reconnection alone is not proof of reconvergence.
 
+- **Phase 2 items:** D41–D47 were explicitly accepted by the owner on 2026-11-13 (see DECISIONS.md). V7 is resolved by measurement (Next.js does not set `X-Forwarded-For`; production needs an outer reverse proxy, D43). The actual production hosting target and proxy deployment remain open under U10; D43 approves the trusted-address-list design, not a specific hosting provider.
 - **D34–D40:** Their individual statuses remain as recorded in DECISIONS.md; do not infer blanket owner approval from implementation or test evidence.
 
 The uploaded ZIP does not include `.git`, so it cannot independently establish the current branch or commit. The owner previously reported that commit `ba82d24` (`feat: Phase 1 project setup and infrastructure`) was pushed to `origin/main`.
@@ -439,3 +440,115 @@ The full scenario evidence and remaining limitations are recorded in docs/spikes
 
 | 2026-11-12 | Phase 1b harness and report scaffold prepared; no S1–S11 results claimed at preparation time. |
 | 2026-11-12 | Phase 1b S1–S11 executed (11/11 PASS); root pnpm check passed (9 test files, 59 tests); U1/U2 explicitly owner-approved; handover updated for evidence-based review. |
+| 2026-11-13 | Phase 2 (authentication and user management) implemented and tested in a preparation environment; docs updated; decisions D41–D47 proposed; V7 resolved by measurement. Awaiting owner verification (§7). |
+| 2026-11-13 | Owner verification of Phase 2 completed locally: migrations/drift check, lint/format/typecheck, 228 tests (20 s timeout), manual browser acceptance, Docker app images/startup and API readiness passed; current-session indicator fixed. D41–D47 accepted. Phase 2 GitHub Actions CI explicitly deferred/not run; final sign-off pending (§7.9). |
+
+## 7. Phase 2 – implementation and verification record (2026-11-13)
+
+### 7.1 What was implemented
+
+| Area | Implementation |
+|---|---|
+| `packages/shared` | `auth.ts`: Zod request/response schemas (strict objects, normalization, password 12–128), cookie-name helper, access-event channel/type, presence-colour palette. `env.ts`: `TRUST_PROXY` (address list), `SESSION_IDLE_TTL_DAYS`, `SESSION_ABSOLUTE_TTL_DAYS` |
+| `packages/db` | `User` and `Session` models; migration `20261112120000_auth_users_sessions` with the `users` check constraints and a token-hash format check; `isUniqueConstraintError`, `isDatabaseUnavailableError`; readiness now requires every shipped migration (D41) |
+| `apps/api` | Argon2id hashing; `SessionService` (hashed tokens, idle/absolute expiry, throttled sliding refresh, injected clock); `requireAuth` guard (`preValidation`, D44); routes `AUTH-01`–`AUTH-07`, `USER-01`–`USER-02`; helmet, CORS allow-list, cookie handling, Origin/Content-Type check, `no-store`; Redis rate limiting (fail closed); Zod validation and response serialization; error mapping (validation details, 503 for PostgreSQL/Redis outages); `session.revoked` event publishing; hourly session cleanup job |
+| `apps/web` | `/api/*` rewrite to the API; login, register and profile pages (profile, password change, active sessions); server-side guards (`requireUser`, `redirectIfSignedIn`); client `AuthProvider`; typed API client; shared-schema form validation; error page |
+| Infra and config | `.env.example`, `infra/Dockerfile.web` (build arg `API_INTERNAL_URL`), `infra/docker-compose.yml` (`TRUST_PROXY`, build arg), `pnpm-workspace.yaml` (`argon2` build approval), `vitest.config.ts` (TSX/jsdom + `@/` alias) |
+| Docs | DATABASE_SCHEMA, API_CONTRACTS, ARCHITECTURE §10, DECISIONS (D35 note, D41–D47), IMPLEMENTATION_PLAN, TESTING, DEPLOYMENT, README, this file |
+
+### 7.2 Acceptance criteria (IMPLEMENTATION_PLAN, Phase 2)
+
+| ID | Status | Evidence / caveat |
+|---|---|---|
+| AC-2.1 | Met | Test reads the stored row: Argon2id string with the recorded parameters, not containing the password. Parameters and timings: ARCHITECTURE §10.1 (sandbox timings only) |
+| AC-2.2 | Met | Test: stored `tokenHash` is 64 hex characters, differs from the cookie token, and the raw token appears nowhere in the session rows; a DB constraint rejects non-digest values |
+| AC-2.3 | Met | API tests inspect `Set-Cookie` (development and production configurations, including clearing) |
+| AC-2.4 | Met | Controlled-clock tests: idle expiry, 30-day absolute expiry with continuous activity, immediate revocation |
+| AC-2.5 | Met | Success and every documented error code for each endpoint is exercised |
+| AC-2.6 | **Partly met** | API: every protected endpoint returns `401`. Web: redirects to `/login` verified over HTTP against a real Next.js server. **No browser E2E was run** (Playwright not implemented/installable here) |
+| AC-2.7 | Met | Missing/foreign Origin → `403 INVALID_ORIGIN`; wrong content type → `415` |
+| AC-2.8 | Met | `429 RATE_LIMITED` with `Retry-After` on repeated logins (per IP and per account) |
+| AC-2.9 | Met | Unknown email and wrong password return identical status and body shape |
+| AC-2.10 | Met | Password change keeps the current session and revokes all others |
+| AC-2.11 | Met | V7 measured and covered by `apps/api/test/web-auth.int.test.ts`; finding in §7.4 |
+| AC-2.12 | Met | Cleanup job test (deletes beyond the 24 h grace, keeps the rest, idempotent) |
+
+### 7.3 Test and check evidence
+
+Run by Claude in a preparation environment (details and limits: TESTING §8.0a): `pnpm test` → 17 files, 228 tests passed, twice in a row (115 unit + 113 integration); `pnpm lint`, `pnpm format:check`, `pnpm typecheck` passed; `next build` succeeded. The owner reproduced them locally on 2026-11-13 (see §7.9); CI has not yet been run on Phase 2.
+
+### 7.4 Findings made while implementing
+
+1. **Authentication ran after validation.** An unauthenticated `PATCH` with an invalid body returned `400`, not `401`. Fixed by moving the guard to `preValidation` (D44); tests now call every protected route unauthenticated (two of them with bodies that would fail validation) and expect `401`.
+2. **V7: Next.js does not set `X-Forwarded-For`** and forwards a client-supplied one unchanged (verified on the dev server and on `next start`). A first draft that trusted the proxy as a boolean would have let clients forge their address. Replaced by a trusted-address list (D43); production needs an outer reverse proxy that sets the header (ARCHITECTURE §10.3). Fastify 5.12 also ignores numeric `trustProxy` values, which ruled out a hop count.
+3. **Mixed clocks.** `passwordChangedAt` was written by the database default at registration but by the application clock on password change, which made a test fail in one environment. The register path now sets it from the application clock.
+4. **Release-age gate.** `pnpm add` silently added an exclusion for a one-day-old `user-event`; replaced by an older version and the exclusion removed (D47).
+5. **Readiness could not detect a missing migration** (D35 limitation). Fixed (D41).
+
+### 7.5 Deviations from the design documents
+
+`avatarAssetId` and the `Asset` relation are not created (Phase 4); `SESSION_COOKIE_NAME` and `ARGON2_*` variables were not implemented (D42, DEPLOYMENT); an extra check constraint on `sessions.tokenHash`; every state-changing request must carry a JSON body (send `{}`); `TRUST_PROXY` is an address list. All are recorded in DATABASE_SCHEMA §4.1.1, API_CONTRACTS §3.1 and DECISIONS.
+
+### 7.6 Not verified and known limitations
+
+- **Browser E2E:** Playwright browser E2E tests are not implemented. Owner-run manual browser acceptance checks passed; jsdom and real-Next.js HTTP tests remain the automated frontend coverage (AC-2.6 is therefore partly met, not fully met).
+- **GitHub Actions CI for Phase 2:** deliberately deferred by the owner on 2026-11-13. It was **not run** and must not be recorded as passed. The historical Phase 1a/1b CI pass in §3 remains a separate result.
+- **Production proxy deployment:** the D43 trusted-proxy configuration is accepted, but the actual production reverse proxy and hosting target are not selected (U10). Production must place the web tier behind a trusted reverse proxy that sets `X-Forwarded-For`; do not expose the web tier directly.
+- Rate-limit values and the Argon2 cost are starting values, not tuned (no target hardware or traffic estimate exists).
+- No email verification, password reset, breached-password check, account lockout notification, CSP on the web app, or audit log (not in scope).
+- The `session.revoked` events are published but nothing consumes them yet (Phase 6).
+- `next dev` is used by one integration test (`web-auth.int.test.ts`, about 15 s, needs ports and a free `apps/web/.next`); monitor its stability when Phase 2 CI is eventually enabled. If it proves flaky, make it build and use `next start`.
+- The optional Compose `apps` profile was verified on `http://localhost:3000` in the owner's browser. The environment-specific `Secure`/`__Host-` cookie caveat in D42 did not block the owner's reported test; still test the production HTTPS topology before deployment.
+
+### 7.7 Owner verification checklist
+
+Owner-run verification record is in §7.9. Results:
+
+1. `pnpm install --frozen-lockfile`, PostgreSQL 17, Redis 7 and `.env`: **Passed**.
+2. `pnpm db:migrate:deploy`, `pnpm db:migrate:status`, and scratch-database `migrate:dev` drift check: **Passed**; both migrations applied, status up to date, no drift/new migration proposed.
+3. Lint, format check and typecheck: **Passed**. All 228 tests passed with `--testTimeout=20000`. The default timeout remains borderline for spawn-heavy tests; see §7.9.
+4. Manual browser acceptance: **Completed**. Registration/login, reload persistence, protected-page redirect, generic invalid-credential message, profile display-name and presence-colour changes, second-session listing/revocation, password-change revocation, logout/back-button protection, and the current-session indicator were checked. The current-session badge was made visible by separating the truncated user-agent text from the non-shrinking badge.
+5. Optional Docker `apps` profile: **Passed**. API, web, collab and migration images built; containers started; migration exited 0 with no pending migrations; owner verified the application in the browser; `GET http://localhost:4000/ready` returned HTTP 200 with `postgres: healthy` and `redis: healthy`.
+6. D41–D47: **Accepted by the owner on 2026-11-13** (DECISIONS.md). D43's trusted-proxy design is accepted; actual production proxy/hosting selection remains open (U10).
+7. Phase 2 GitHub Actions CI: **Deferred by explicit owner instruction; not run and not passed.** Do not mark Phase 2 CI as passed until a real workflow run succeeds.
+
+### 7.8 Notes for Phase 3
+
+New protected endpoints go inside the authenticated scope in `apps/api/src/routes/auth.ts` (hook `requireAuth`, user via `authOf(request)`), with per-route `config.rateLimit`; add the shared permission function (D23) rather than ad-hoc checks. Use `Dependencies.clock` for every time-based decision. The web `(app)` route group and `requireUser()` are the pattern for protected pages. Phase 3 adds its tables in a new migration; the readiness check will then require that migration automatically.
+
+### 7.9 Owner verification record (2026-11-13)
+
+Environment: Windows laptop, Git Bash/Windows terminal, Node.js 24.18.0, pnpm 12.18.0, Docker 29.9.2, PostgreSQL 17 and Redis 7 from the local Compose file.
+
+**Owner-run Phase 2 acceptance checks are complete, except Phase 2 GitHub Actions CI, which the owner explicitly deferred. Final Phase 2 sign-off has not yet been recorded.**
+
+| Verification area | Result | Evidence / qualification |
+|---|---|---|
+| Install and local infrastructure | **Passed** | `pnpm install --frozen-lockfile` clean; PostgreSQL (host 5433) and Redis (6379) healthy; `.env` present |
+| Prisma migration and drift | **Passed** | `migrate deploy`: no pending migrations; `migrate status`: up to date. Scratch database `conote_scratch`: `migrate:dev` applied both migrations from empty without proposing a new migration; second run reported "Already in sync" |
+| Lint, format and typecheck | **Passed** | Owner reports all passed |
+| Automated tests | **Passed with timeout qualification** | 17 files / 228 tests passed with `--testTimeout=20000`. The default 5-second timeout was borderline for spawn-heavy tests; see Findings |
+| Manual browser acceptance | **Passed** | Registration/login, reload persistence, signed-out protected-page redirect, generic wrong-password/unknown-email response, profile display-name and presence-colour changes, header update after reload, second-session listing/revocation, password-change revocation of other sessions, logout/back-button protection, and current-session indicator verified by owner |
+| Current-session indicator | **Fixed and verified** | API returned `current: true`; DTO already declared `current: boolean`. UI issue was truncation on the paragraph containing both the long user-agent and badge. The user-agent is now truncated independently and the `This device` badge uses `shrink-0`; owner confirmed the indicator appears |
+| Docker app images and startup | **Passed** | `docker compose -f infra/docker-compose.yml --profile apps up --build`: API, web, collab and migrate images all built; PostgreSQL and Redis healthy; migration container exited with code 0 and reported no pending migrations; API, web and collab started |
+| Docker application browser check | **Passed** | Owner confirmed the Docker-hosted application had already been verified in the browser |
+| API readiness in Docker | **Passed** | `curl.exe -i http://localhost:4000/ready` returned HTTP 200: `{"status":"ready","service":"api","dependencies":{"postgres":"healthy","redis":"healthy"}}` |
+| D41–D47 owner decisions | **Accepted** | All seven decisions explicitly accepted by the owner on 2026-11-13; details and Option A selections are recorded in DECISIONS.md |
+| GitHub Actions CI for Phase 2 | **Deferred / not run** | Owner explicitly chose to hold GitHub CI for now. This is not a pass and must not be represented as one |
+| Production hosting / proxy deployment | **Open** | D43 design accepted, but provider/topology selection remains U10 and must be completed before production deployment |
+
+#### Findings and qualifications retained from the verification process
+
+1. **Stale Phase 1 page shadowed the Phase 2 home page.** `apps/web/src/app/page.tsx` (the Phase 1 placeholder) existed alongside `apps/web/src/app/(app)/page.tsx`; both resolve to `/`, and the placeholder won. Three tests in `web-auth.int.test.ts` failed (unauthenticated `/` returned 200 instead of redirecting; the signed-in page lacked the welcome text). The stub was removed with `git rm` and `apps/web/.next` was deleted; the file then passed 7/7. Ensure the deletion is included in the Phase 2 change set.
+2. **Default test timeout is borderline on this machine.** Earlier default runs encountered timeout failures in spawn-heavy tests (`tests/boundaries.test.ts` and `tests/startup.test.ts`). In isolation the boundaries test took about 4.1 seconds of its 5-second limit. All 228 tests passed with `--testTimeout=20000`. No repository timeout change is recorded here; decide whether to adjust it before relying on CI.
+3. **Development environment setup:** the root `package.json` has no `dev` script; run `pnpm dev:api` and `pnpm dev:web` in separate terminals (`dev:collab` is not needed for Phase 2). Next.js does not automatically read the root `.env`; the local workaround was `apps/web/.env.local` with `APP_URL` and `API_INTERNAL_URL`. Decide whether to document this or change the development script.
+4. **Network binding:** the API was observed listening on all network interfaces during development. Review exposure and proxy configuration before production.
+5. **Production reverse proxy:** D43's trusted-address-list design is accepted, but the actual proxy address list and production topology must be configured for the selected hosting environment (U10).
+
+#### Remaining before Phase 2 final sign-off
+
+- The owner deferred GitHub Actions CI. Before treating Phase 2 as fully closed under a process that requires CI, run the Phase 2 workflow and record its actual result. Until then, CI remains **deferred/not run**, not passed.
+- Decide whether to raise the default timeout for spawn-heavy tests and document/fix root `.env` loading for `pnpm dev:web`.
+- Select the production hosting and reverse-proxy topology (U10) before deployment. This does not block local Phase 2 feature verification, but is a production deployment requirement.
+- Record the owner's explicit final Phase 2 acceptance before starting Phase 3.
+
