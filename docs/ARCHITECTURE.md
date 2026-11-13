@@ -462,6 +462,21 @@ Hocuspocus hook payloads use web-standard `Request`/`Headers` since v4; document
 | V13 | Close-event codes the Hocuspocus provider surfaces for auth failures and custom closes | Phase 1 spike / Phase 6 |
 | V14 | Server-side enforcement of awareness identity (rejecting or rewriting awareness states whose user id differs from the authenticated user) | Phase 1 spike / Phase 7 |
 
+### 18.1 Hocuspocus 4.8.0 source/API inspection (not runtime verification)
+
+The Phase 1b harness is prepared, but S1–S11 have not yet been executed. The following are library/API findings only and do not close the corresponding `V#` or `U#` items:
+
+- Configuration exposes `debounce` (default 2000 ms), `maxDebounce` (default 10000 ms), and `unloadImmediately`. The spike sets `unloadImmediately: false` so the configured store debounce can be observed.
+- Hocuspocus v4 `onStoreDocument` can run for changes not originating from WebSocket clients, including Redis replication; the Redis extension's `onChange` skips Redis-originated transactions to avoid republishing loops. S5 must still measure the resulting hook/store behaviour and duplicate-write characteristics.
+- `onAuthenticate` receives the provider token and a connection configuration with `readOnly`; the provider accepts static or sync/async token callbacks. The spike uses a throwaway Ed25519 token only; production refresh remains Phase 6.
+- The provider's v4 `onClose` callback exposes close `code` and `reason`; exact failure mapping still requires the S8 runtime observation and Phase 6 review.
+- `beforeHandleAwareness` exposes a mutable map of decoded states; the spike drops states whose claimed user id differs from the authenticated context.
+- `onStateless` receives client stateless messages; the connection can send a stateless response.
+- `websocketOptions.maxPayload`, pre-authentication queue limits, pending-document limits and `getConnectionsCount()` are available as capability controls. They are not a complete production abuse-protection policy.
+- Hocuspocus 4.8.0 supports `lockTimeout: 0` for stores without the Redis lock and includes an awareness-removal fix on last connection close. The spike uses this lock mode because PostgreSQL row locks serialize persistence; Redis must not become a durability dependency. Awareness propagation/expiry still requires S2 runtime evidence.
+
+See `docs/spikes/phase-1-collab-spike.md` for the preparation environment and pending empirical scenarios. The official references are linked in that report.
+
 ## 19. References
 
 Retrieved during Phase 0 research:

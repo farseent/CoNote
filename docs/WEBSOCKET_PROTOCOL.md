@@ -1,6 +1,6 @@
 # CoNote – WebSocket Protocol
 
-**Status:** Protocol design only. The Phase 1 collab process shell and health endpoints exist, but every document connection is deliberately rejected; no CoNote collaboration protocol feature is implemented. Phase 1b spike is outstanding.
+**Status:** Protocol design only. The Phase 1 collab process shell and health endpoints exist, but every document connection is deliberately rejected; no CoNote collaboration protocol feature is implemented. The disposable Phase 1b harness is prepared under `spikes/collab-poc/`, but S1–S11 have not yet been executed; all runtime-dependent statements below remain subject to the verification register.
 **Last updated:** 2026-11-12
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); guarantees `G1`–`G7` and verification items `V#` are in [ARCHITECTURE.md](ARCHITECTURE.md) (§8, §18). REST contracts are in [API_CONTRACTS.md](API_CONTRACTS.md).
@@ -340,7 +340,7 @@ The full environment variable table is in DEPLOYMENT.md.
 
 ## 15. Verification items owned by this document
 
-The items below are checked by the Phase 1 spike unless another phase is named: V1 (store/unload semantics), V2 (store hook for Redis-originated updates), V3 (awareness propagation and expiry), V4 (reconvergence after Redis outage), V5 (token not in URL), V6 (token function on reconnect, Phase 6), V11 (size and connection limits, Phase 6/9), V12 (client-to-server stateless messages), V13 (close codes), V14 (awareness identity enforcement). See ARCHITECTURE.md §18 and IMPLEMENTATION_PLAN.md Phase 1.
+The Phase 1b harness is prepared but not yet executed. The items below are checked by the Phase 1 spike unless another phase is named: V1 (store/unload semantics), V2 (store hook for Redis-originated updates), V3 (awareness propagation and expiry), V4 (reconvergence after Redis outage), V5 (token not in URL), V6 (token function on reconnect, Phase 6), V11 (size and connection limits, Phase 6/9), V12 (client-to-server stateless messages), V13 (close codes), V14 (awareness identity enforcement). See ARCHITECTURE.md §18 and IMPLEMENTATION_PLAN.md Phase 1.
 
 ## 16. References
 

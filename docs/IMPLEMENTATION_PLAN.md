@@ -1,7 +1,6 @@
 # CoNote – Implementation Plan
 
-**Status:** Phase 1a infrastructure is complete based on owner-reported local and CI verification. Phase 1b collaboration spike is outstanding and is the next approved work before Phase 2.
-**Last updated:** 2026-11-12
+**Status:** Phase 1a infrastructure is complete based on owner-reported local and CI verification. Phase 1b S1–S11 execution was completed on 2026-11-12, with all eleven scenarios reporting PASS at spike level. Phase 1 closeout remains in progress: AC-1.9 evidence mapping, AC-1.10 architectural updates and owner decisions U1/U2, and AC-1.11 exclusion verification remain outstanding. Phase 2 remains blocked.
 
 IDs used: decisions `D#`/`U#` ([DECISIONS.md](DECISIONS.md)); requirements `FR-*`, `NFR-*`, `PERF-*` ([PROJECT_MASTER.md](PROJECT_MASTER.md)); endpoints (`AUTH-01` …) ([API_CONTRACTS.md](API_CONTRACTS.md)); guarantees `G1`–`G7` and verification items `V1`–`V14` ([ARCHITECTURE.md](ARCHITECTURE.md)). Test categories are defined in [TESTING.md](TESTING.md): `UT` unit, `IT` integration, `API`, `DB`, `WS`, `CE` concurrent editing, `MB` multi-browser, `PERM` permission, `RECON` reconnection, `REC` recovery, `LOAD`, `E2E`, `SEC`, and `GT` guarantee tests (G1–G7).
 
@@ -71,7 +70,7 @@ flowchart LR
 
 ## Phase 1 – Project Setup and Infrastructure (including the collaboration spike)
 
-> **Status (2026-11-12): Phase 1a (infrastructure) implemented; Phase 1b (collaboration spike, AC-1.8–AC-1.10) NOT done** — see D33 and `docs/HANDOVER.md` §3. Scope lines below for MinIO (D37) and real migrations (D35) were adjusted as recorded in those decisions.
+> **Status (2026-11-12): Phase 1a infrastructure complete; Phase 1b experiments executed, with S1–S11 all passing at spike level. AC-1.8 is met. AC-1.9 is partially met; AC-1.10 and AC-1.11 remain open. See docs/spikes/phase-1-collab-spike.md and docs/HANDOVER.md.**
 
 **Objectives:** A working, verified monorepo and local infrastructure; empirical answers to the open collaboration questions before Phases 5–9 depend on them.
 
@@ -127,6 +126,10 @@ flowchart LR
 | AC-1.9 | Record spike-level evidence for U3/U4, V1–V5, V12–V14. For V6 and V11, record the library capability/limitations observed and explicitly defer production token refresh and abuse enforcement to Phases 6/9. Every item must be marked resolved at the level tested or remain open with a reason, owner and target phase; spike observations must not be represented as production verification. |
 | AC-1.10 | Architectural implications of the spike are written into DECISIONS.md/ARCHITECTURE.md/WEBSOCKET_PROTOCOL.md. U5/V8 is resolved with the Phase 1a implementation and migration evidence. U1/U2 must receive explicit owner decisions (accept Node 24 and TypeScript 5.9.3, or choose alternatives) before Phase 1 is closed. |
 | AC-1.11 | The spike directory is removed (or clearly archived and excluded from builds) and no production collaboration feature code exists. |
+
+**Phase 1b execution update (2026-11-12):** The isolated spike was executed locally using Node v24.18.0, pnpm 12.18.0, PostgreSQL and isolated Redis on port 6380. Typecheck and build passed. All scenarios S1–S11 reported PASS. The detailed evidence, limitations and observations are recorded in docs/spikes/phase-1-collab-spike.md.
+
+AC-1.8 is met at spike level. AC-1.9 remains partial pending item-by-item review of U3/U4 and V1–V5/V12–V14. AC-1.10 remains open pending architectural documentation updates and explicit U1/U2 owner decisions. AC-1.11 remains pending root exclusion verification. Phase 2 remains blocked.
 
 **Testing requirements:** `UT` for tooling sanity; `IT` for `/ready` behaviour; spike scenarios are manual-scripted experiments recorded in the results document (not part of the permanent test suite).
 

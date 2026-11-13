@@ -76,6 +76,7 @@ export default tseslint.config(
       '**/coverage/**',
       'packages/db/src/generated/**',
       'docs/**',
+      'spikes/**',
       'apps/web/next-env.d.ts',
     ],
   },

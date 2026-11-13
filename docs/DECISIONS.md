@@ -1,7 +1,9 @@
 # CoNote – Technical Decisions
 
-**Status:** Phase 1a infrastructure implemented; Phase 1b collaboration spike outstanding and owner-selected before Phase 2. U5/V8 resolved by reported implementation evidence; U1/U2 owner sign-off pending.
+**Status:** Phase 1a infrastructure verification is complete based on owner-reported evidence. Phase 1b collaboration spike S1–S11 executed successfully (11/11 PASS); root `pnpm check` passed on 2026-11-12 (9 test files, 59 tests). The project owner approved U1 (Node.js 24) and U2 (TypeScript 5.9.3). U3 and U4 remain partially evidenced; U13 remains unresolved. Final cross-document reconciliation and owner review are in progress. Phase 2 remains blocked until the owner explicitly approves Phase 1 closure.
+
 **Last updated:** 2026-11-12
+
 **Owner:** Project owner (approvals) / Claude (drafting)
 
 This is the permanent decision register for CoNote. Decision IDs (`D#`) and unresolved-question IDs (`U#`) are **permanent**: they are never renumbered or reused. A changed decision is recorded by adding a new decision that supersedes the old one and updating the old one's status.
@@ -12,7 +14,7 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 |---|---|
 | **Accepted** | Explicitly approved by the project owner. |
 | **Accepted (requirement)** | Stated by the project owner as a project requirement. |
-| **Proposed** | Drafted during Phase 0 and included in the Phase 0 package. Treated as the working plan unless the owner changes it. |
+| **Proposed** | Drafted as a working plan but not explicitly approved by the project owner. It remains a proposal unless approval is recorded. |
 | **Unresolved** | Not yet decided. Listed in the "Unresolved decisions" section. |
 | **Superseded** | Replaced by a later decision (none yet). |
 
@@ -35,8 +37,8 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 | D13 | Dependency pinning and Node.js requirements policy | Accepted (requirement) |
 | D14 | PostgreSQL is the durable source of truth; Redis is never permanent storage | Accepted (requirement) |
 | D15 | Yjs persistence model: incremental updates + compacted state + snapshots | Proposed |
-| D16 | Node.js 24 LTS baseline | Proposed (see U1) |
-| D17 | TypeScript 5.9.x pin | Proposed (see U2) |
+| D16 | Node.js 24 LTS baseline | Accepted (owner approval, 2026-11-12) |
+| D17 | TypeScript 5.9.x pin | Accepted (owner approval, 2026-11-12) |
 | D18 | Prisma 7.10.x pin (CLI and client together) | Proposed (see U5) |
 | D19 | ioredis 5.6.x pin | Proposed |
 | D20 | Tiptap 3.x + Yjs 13.x + `@tiptap/y-tiptap` | Proposed |
@@ -74,7 +76,7 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 - **Consequences:**
   - Hocuspocus is Yjs-compatible. **Wire compatibility with the plain `y-websocket` client is not assumed or required.** The client must use `HocuspocusProvider`.
   - Hocuspocus 4 requires Node.js >= 22 (from package metadata) and uses web-standard `Request`/`Headers` objects in hooks.
-  - If Hocuspocus proves unsuitable in the Phase 1 spike, the fallback is a custom server on `y-protocols` (recorded as a new decision that supersedes D1).
+  - If later implementation or production validation shows Hocuspocus is unsuitable, the fallback is a custom server on `y-protocols` (recorded as a new decision that supersedes D1).
 - **References:** Hocuspocus docs (hooks, authentication, Redis); `y-websocket` and `y-redis` READMEs. See ARCHITECTURE.md §17.
 
 ### D2 – Multi-instance sync: Redis fan-out
@@ -87,7 +89,7 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
   - **All messages are handled on all instances**, so adding instances behind Redis adds connection capacity and availability, not CPU relief per document.
   - When a document is loaded on one instance while open on another, the load waits for the other instance's current state, bounded by `awaitInitialSyncTimeout` (default 1000 ms).
   - Storing a document is mutually exclusive across instances (an instance that is storing a document blocks the others).
-- **Consequences:** Behaviour under Redis failure, duplicate persistence and awareness propagation must be verified in the Phase 1 spike (U3, U4) before Phase 6 relies on it.
+- **Consequences:** The Phase 1b spike exercised cross-instance synchronization, persistence, Redis-originated updates, awareness and a Redis outage (S1–S7). S7 showed that restarting Redis alone does not make already-open documents reconverge; both collab servers had to restart and rehydrate from PostgreSQL. Remaining persistence and awareness limitations are tracked under U3/U4, and the explicit Phase 9 recovery mechanism remains U13. The spike is evidence, not a production recovery implementation.
 - **References:** Hocuspocus Redis extension docs. See ARCHITECTURE.md §9.
 
 ### D3 – Separate API service
@@ -146,12 +148,12 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 
 - **Status:** Accepted
 - **Decision:** Images are stored in **S3-compatible object storage**: MinIO for local development if practical; an S3-compatible provider in production. Image storage sits behind a **storage adapter interface** in `apps/api` so it stays modular. Images are never stored in PostgreSQL.
-- **Consequences:** Upload flow, limits and allowed types are U7. MinIO distribution/licensing status must be re-checked in Phase 1.
+- **Consequences:** Upload flow, limits, allowed types and confirmation of MinIO distribution/licensing are tracked in U7. Confirm the local-development storage option before implementing image storage in Phase 4 (D37).
 
 ### D28 – Roadmap structure
 
 - **Status:** Accepted
-- **Decision:** Keep Phases 0–11. Phase 1 includes a **small disposable two-instance Hocuspocus + Redis + PostgreSQL proof of concept** that verifies cross-instance sync, awareness propagation, and persistence and recovery, and records the results and architectural implications. The complete collaboration feature is **not** built in Phase 1. **Phases 5 and 6 remain separate.**
+- **Decision:** Keep Phases 0–11. Phase 1 includes a **small disposable two-instance Hocuspocus + Redis + PostgreSQL proof of concept** that tests cross-instance sync, awareness propagation, persistence and failure/recovery behaviour, and records the results and architectural implications. The Phase 1b spike is complete (S1–S11, 11/11 PASS), but it is evidence rather than a production collaboration implementation. S7 showed that Redis restart alone does not reconverge already-open documents; explicit recovery remains a Phase 9 requirement (U13). The complete collaboration feature is **not** built in Phase 1. **Phases 5 and 6 remain separate.**
 - **Consequences:** See IMPLEMENTATION_PLAN.md Phase 1 and Phase 5/6 boundaries.
 
 ---
@@ -195,26 +197,26 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 
 - **Status:** Proposed
 - **Context:** Storing the full document on every keystroke is explicitly rejected. Hocuspocus's Redis extension serializes stores across instances.
-- **Decision (baseline design, to be validated by the Phase 1 spike):**
-  1. **`DocumentUpdate`** – append-only rows holding *incremental* Yjs update binaries (diffs), ordered by a monotonically increasing sequence.
+- **Decision (baseline design; partially evaluated by the Phase 1b spike):**
+  1. **`DocumentUpdate`** – append-only rows holding **incremental** Yjs update binaries (diffs), ordered by a monotonically increasing sequence.
   2. **`DocumentState`** – one row per page holding the **compacted full state** (`foldedState`), the **persisted state vector** (coverage of the folded state plus all stored updates), and the highest update sequence folded into it (`foldedSeq`). It is also the per-page lock row.
   3. **`DocumentSnapshot`** – immutable full-state versions for version history (manual, automatic and pre-restore).
   4. **Write path:** on the collab server's debounced store hook, compute the diff between the live `Y.Doc` and the **last persisted state vector** and append it as one `DocumentUpdate` row. Never write the whole document per edit.
   5. **Compaction:** merge updates into `DocumentState` and delete the folded rows in one transaction, when a threshold is exceeded or a document unloads.
   6. **Recovery:** load `DocumentState`, apply `DocumentUpdate` rows with a higher sequence, in order.
 - **Initial tunables (not performance claims; adjusted using spike and Phase 9 measurements):** store debounce 2000 ms, max debounce 10000 ms (Hocuspocus defaults, to be confirmed), compaction after 200 update rows or on unload.
-- **Consequences:** Models and columns in DATABASE_SCHEMA.md; guarantees G2–G4 in ARCHITECTURE.md; open verification items U3. Authorship tracking is through `ActivityLog` (see ARCHITECTURE.md §13).
+- **Consequences:** Models and columns are specified in DATABASE_SCHEMA.md; guarantees G2–G4 are specified in ARCHITECTURE.md. Phase 1b S4/S5 provided evidence for incremental persistence, PostgreSQL reload and Redis-originated update handling. Store-on-unload and direct concurrent row-lock behaviour remain unverified under U3. Authorship tracking is through `ActivityLog` (see ARCHITECTURE.md §13).
 
 ### D16 – Node.js 24 LTS baseline
 
-- **Status:** Proposed
+- **Status:** Accepted (owner approval, 2026-11-12)
 - **Context (as of 2026-11-11, per Node.js release-schedule sources):** Node 22 is in Maintenance LTS until 2027-04-30. Node 24 entered Maintenance on 2026-10-20 with end of life 2028-04-30. Node 26 became Active LTS on 2026-10-28 (end of life 2029-04-30) and is two weeks old. All planned dependencies accept Node 24 (Hocuspocus >= 22; Prisma ^20.19 / ^22.12 / >= 24; Vitest ^22.12 / ^24 / >= 26; Next.js >= 20.9).
 - **Decision:** Develop and deploy on **Node.js 24 LTS** (latest 24.x patch, pinned in `.nvmrc`/Docker). Re-evaluate Node 26 later (U1).
 - **Rationale:** Mature native-module ecosystem (`argon2`) and support through April 2028, avoiding a runtime that is only weeks into LTS.
 
 ### D17 – TypeScript 5.9.x
 
-- **Status:** Proposed
+- **Status:** Accepted (owner approval, 2026-11-12)
 - **Context:** The npm `latest` tag for TypeScript is 7.0.2 (2026-11-11). Prisma's requirement is TypeScript >= 5.4. Compatibility of the rest of the toolchain (Next.js type checking, Fastify and Zod types, ESLint tooling) with 7.x was **not verified** in Phase 0.
 - **Decision:** Pin **TypeScript 5.9.3** initially. Revisit 6.x/7.x as a controlled upgrade (U2).
 
@@ -269,7 +271,9 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
   3. The override for U on the nearest ancestor page (walking `parentId` upwards).
   4. U's workspace role mapped to the same-named page capability (`EDITOR`, `COMMENTER`, `VIEWER`).
   5. Otherwise no access.
+
   `NONE` denies access. Non-members of the workspace never have access (external guests are out of scope, U9).
+
 - **Capabilities** (capability matrix in PROJECT_MASTER.md §5): `VIEWER` reads; `COMMENTER` reads and comments; `EDITOR` reads, comments, edits, creates child pages, moves and deletes pages; `ADMIN`/`OWNER` additionally manage members, invitations, page permissions and workspace settings (only `OWNER` deletes the workspace or transfers ownership). Only the `OWNER` may grant or revoke `ADMIN`; Admins manage Editor/Commenter/Viewer members and may remove only non-Admin members.
 - **Consequence:** The resolution function lives in `packages/shared` as a pure function and is unit-tested exhaustively; API and collab both call it.
 
@@ -319,7 +323,7 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 
 ### D33 – Phase 1 delivered in two parts; collaboration spike deferred (Phase 1b)
 
-`docs/IMPLEMENTATION_PLAN.md` Phase 1 includes a disposable collaboration spike (S1–S11, AC-1.8–1.10) and the resolution/qualification of U3/U4/V1–V6/V11–V14. The owner's original Phase 1 task list covered infrastructure only, so delivery was split into Phase 1a and Phase 1b. **Phase 1a is complete based on the owner-reported evidence in HANDOVER.md; Phase 1b remains outstanding. The owner has explicitly chosen to run Phase 1b before Phase 2.** Phase 2 must not start until the spike is completed, its results reviewed, and the owner separately approves Phase 2.
+`docs/IMPLEMENTATION_PLAN.md` Phase 1 includes a disposable collaboration spike (S1–S11, AC-1.8–1.10) and the resolution/qualification of U3/U4/V1–V6/V11–V14. The owner's original Phase 1 task list covered infrastructure only, so delivery was split into Phase 1a and Phase 1b. **Phase 1a infrastructure verification is complete based on owner-reported evidence in HANDOVER.md. Phase 1b has now been executed: S1–S11 passed (11/11), and root `pnpm check` passed on 2026-11-12 (9 test files, 59 tests).** U1 and U2 were explicitly approved by the owner on 2026-11-12. U3/U4 remain partially evidenced, and the outstanding limitations and documentation reconciliation are recorded in HANDOVER.md and `docs/spikes/phase-1-collab-spike.md`. Phase 1 closure has not yet been approved. **Do not start Phase 2 until the owner has reviewed the evidence and explicitly approved Phase 1 closure.**
 
 ### D34 – Operational endpoints return plain JSON with a `service` field
 
@@ -355,19 +359,18 @@ The "Needed by" column states the phase gate for each item. Resolved items remai
 
 | ID | Question | Options | Recommendation | Needed by |
 |---|---|---|---|---|
-| **U1** *(Implemented and exercised; owner sign-off pending)* | Node.js baseline: 24 or 26? | Node 24 LTS (Maintenance from 2026-10-20, EOL 2028-04-30); Node 26 (Active LTS from 2026-10-28, EOL 2029-04-30) | Node 24 now (D16); re-evaluate Node 26 after confirming all native modules and CI images | Owner decision before Phase 1 close |
-| **U2** *(Implemented and exercised; owner sign-off pending)* | TypeScript version: 5.9.3 or newer (6.x/7.x)? | Stay on 5.9.3; adopt 6.x; adopt 7.x | Stay on 5.9.3 (D17); trial newer in a separate branch once the toolchain is verified | Owner decision before Phase 1 close |
-| **U3** | Do the Hocuspocus store hooks and Redis extension behave as the persistence design (D15) assumes? (debounce option names, store-on-unload, behaviour of change/store hooks for updates that arrive via Redis, duplicate writes, lock behaviour) | Diff-on-store (baseline); per-update append from change hook with origin filtering | Diff-on-store; spike decides | Phase 1 spike |
-| **U4** | Awareness semantics: do awareness updates propagate across instances and from read-only connections (viewers/commenters), and what happens to stale awareness states after an instance crash? | n/a (empirical) | Verify in spike; if read-only connections cannot publish awareness, decide whether viewers appear in presence | Phase 1 spike |
-
-| **U6** | Invitation email delivery provider | SMTP via Mailpit in dev + provider TBD in prod; transactional email API | Phase 3 ships **link-based** invitations plus an email-adapter interface (console/Mailpit for dev); pick a production provider before Phase 11 | Phase 3 (link only) / Phase 11 (provider) |
-| **U7** | Image upload flow and limits | Presigned direct upload to object storage; upload through the API | Presigned upload with server-side validation of type and size limits; exact limits to be set in Phase 4. Also confirm MinIO's current distribution/licensing for local dev | Phase 4 |
-| **U8** | Behaviour of comment anchors after version restore (D8 + D9) | Mark affected threads "detached" (kept, unanchored); attempt re-anchoring by quoted text | Mark detached, keep thread and quoted text; re-anchoring is a later enhancement | Phase 8 |
-| **U9** | External guests (access to a single page for non-members) | Out of scope for MVP; or add later | Out of scope; revisit after Phase 10 | Phase 3 (confirm out of scope) |
-| **U10** | Production hosting target | Single VM with Docker Compose; managed container platform + managed Postgres/Redis | DEPLOYMENT.md is written provider-neutral (container images + reference topology); owner picks a target before Phase 11 | Phase 11 |
-| **U11** | Retention policy for AUTO snapshots and activity logs | Keep all; prune AUTO snapshots by age/count while always keeping MANUAL and PRE_RESTORE; time-based activity pruning | Keep MANUAL and PRE_RESTORE indefinitely, prune AUTO snapshots by a policy chosen from Phase 9 growth measurements; activity logs kept until Phase 10 review | Phase 8 (snapshot rules) / Phase 10 (implementation) |
-| **U12** | Repository license and visibility (public/private) | Permissive open-source license; all rights reserved/private | Owner decides; until decided the repository states "License: not yet chosen" | Before the repository is made public (no later than Phase 11) |
-| **U13** | Which explicit Phase 9 recovery mechanism detects and reconciles documents after Redis Pub/Sub message loss? Options: force clients to reconnect to PostgreSQL-hydrated state, or implement verified server-to-server reconciliation. Redis reconnect alone is insufficient. | Select from Phase 1/9 evidence; forced reconnect is the conservative baseline | Phase 9 |
+| **U1 – RESOLVED (Phase 1b, 2026-11-12)** | Node.js baseline: 24 or 26? | Node.js 24 or Node.js 26 | Node.js 24 LTS approved by the project owner on 2026-11-12; used for the Phase 1b spike and root checks. See D16 and HANDOVER. | Phase 1 |
+| **U2 – RESOLVED (Phase 1b, 2026-11-12)** | TypeScript version: 5.9.3 or newer (6.x/7.x)? | TypeScript 5.9.3 or newer | TypeScript 5.9.3 approved by the project owner on 2026-11-12; used for the Phase 1b spike and root checks. See D17 and HANDOVER. | Phase 1 |
+| **U3 – PARTIALLY EVIDENCED (Phase 1b, 2026-11-12)** | Do Hocuspocus store hooks and Redis behave as the persistence design (D15) assumes? Consider debounce options, store-on-unload, Redis-originated updates, duplicate writes and lock behaviour. | Diff-on-store; per-update append from change hook with origin filtering | S4 and S5 verified persistence, Redis-originated updates and duplicate-write behaviour. Store-on-unload and direct concurrent row-lock behaviour remain unverified. | Phase 1 closure / Phase 9 |
+| **U4 – PARTIALLY EVIDENCED (Phase 1b, 2026-11-12)** | Do awareness updates propagate across instances and from read-only connections, and what happens to stale awareness after an instance crash? | Empirical verification | S2, S3 and S10 verified cross-instance awareness, read-only awareness propagation and forged identity rejection. Stale awareness after server crash and name/color tampering remain unverified. | Phase 1 closure / Phase 6 |
+| **U6** | Invitation email delivery provider | SMTP via Mailpit in development with production provider TBD; transactional email API | Phase 3 ships link-based invitations plus an email-adapter interface (console/Mailpit for development); choose a production provider before Phase 11. | Phase 3 (link only) / Phase 11 (provider) |
+| **U7** | Image upload flow and limits | Presigned direct upload to object storage; upload through the API | Use presigned uploads with server-side validation of type and size limits; set exact limits in Phase 4. Confirm MinIO's current distribution/licensing before selecting it for local development. | Phase 4 |
+| **U8** | Behaviour of comment anchors after version restore (D8 + D9) | Mark affected threads detached (kept, unanchored); attempt re-anchoring by quoted text | Mark detached, keep thread and quoted text; re-anchoring is a later enhancement. | Phase 8 |
+| **U9** | External guests (access to a single page for non-members) | Out of scope for MVP; or add later | Out of scope; revisit after Phase 10. | Phase 3 (confirm out of scope) |
+| **U10** | Production hosting target | Single VM with Docker Compose; managed container platform with managed PostgreSQL/Redis | DEPLOYMENT.md is provider-neutral (container images and reference topology); owner picks a target before Phase 11. | Phase 11 |
+| **U11** | Retention policy for AUTO snapshots and activity logs | Keep all; prune AUTO snapshots by age/count while always keeping MANUAL and PRE_RESTORE; time-based activity pruning | Keep MANUAL and PRE_RESTORE indefinitely, prune AUTO snapshots by a policy chosen from Phase 9 growth measurements; review activity-log retention in Phase 10. | Phase 8 (snapshot rules) / Phase 10 (implementation) |
+| **U12** | Repository license and visibility (public/private) | Permissive open-source license; all rights reserved/private | Owner decides; until decided the repository states "License: not yet chosen". | Before the repository is made public (no later than Phase 11) |
+| **U13** | Which explicit Phase 9 recovery mechanism detects and reconciles documents after Redis Pub/Sub message loss? | Force clients to reconnect to PostgreSQL-hydrated state, or implement verified server-to-server reconciliation. Redis reconnect alone is insufficient. | Select and verify the mechanism in Phase 9 using the Phase 1b evidence; forced reconnect is the conservative baseline. | Phase 9 |
 
 ---
 
@@ -375,6 +378,8 @@ The "Needed by" column states the phase gate for each item. Resolved items remai
 
 | ID | Question | Resolution and evidence |
 |---|---|---|
+| **U1 – RESOLVED (Phase 1b, 2026-11-12)** | Node.js baseline: 24 or 26? | Project owner explicitly approved Node.js 24 on 2026-11-12. Phase 1b spike and root checks were executed using Node.js 24.18.0. See D16 and HANDOVER. |
+| **U2 – RESOLVED (Phase 1b, 2026-11-12)** | TypeScript version: 5.9.3 or newer (6.x/7.x)? | Project owner explicitly approved TypeScript 5.9.3 on 2026-11-12. Phase 1b spike and root checks passed with the pinned TypeScript version. See D17 and HANDOVER. |
 | **U5 – RESOLVED (Phase 1a, 2026-11-12)** | Prisma 7 setup in a pnpm monorepo: generator output, driver adapter, `prisma.config.ts` and migration workflow | Prisma 7.10.1 configured with `prisma-client` output under `packages/db/src/generated/prisma`, `@prisma/adapter-pg`, and `prisma.config.ts`. Owner reports successful client generation, a real adapter query, `pnpm db:migrate:deploy`, and `pnpm db:migrate:status` reporting up to date. See D35/D36 and HANDOVER §3. |
 
 ## Superseded decisions

@@ -8,3 +8,4 @@ docs
 README.md
 CLAUDE.md
 apps/web/next-env.d.ts
+spikes/**

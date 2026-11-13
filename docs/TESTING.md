@@ -1,6 +1,6 @@
 # CoNote – Testing Strategy
 
-**Status:** Phase 1a test foundation implemented and reported passing (9 test files; 59 tests: 47 unit and 12 integration). Product-feature and collaboration-spike tests are not yet implemented.
+**Status:** Phase 1a test foundation implemented and reported passing (9 test files; 59 tests: 47 unit and 12 integration). The disposable Phase 1b manual-scripted harness is prepared under `spikes/collab-poc/`, but S1–S11 have not yet been executed. Product-feature tests are not yet implemented.
 **Last updated:** 2026-11-12
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); requirements and metrics (`FR-*`, `NFR-*`, `PERF-*`) in [PROJECT_MASTER.md](PROJECT_MASTER.md); guarantees `G1`–`G7` in [ARCHITECTURE.md](ARCHITECTURE.md) §8; phases and acceptance criteria (`AC-*`) in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
