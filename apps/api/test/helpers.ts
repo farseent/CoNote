@@ -15,6 +15,7 @@ export function testConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
   return {
     ...createApiConfig({
       NODE_ENV: 'test',
+      APP_URL: TEST_ORIGIN,
       ALLOWED_ORIGINS: [TEST_ORIGIN],
       TRUST_PROXY: [],
       SESSION_IDLE_TTL_DAYS: 7,
@@ -26,6 +27,7 @@ export function testConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
       login: RELAXED,
       loginAccount: RELAXED,
       password: RELAXED,
+      invitation: RELAXED,
     },
     // A fresh namespace per app keeps rate-limit counters isolated between tests.
     rateLimitNamespace: `conote:rl:test:${randomUUID()}:`,

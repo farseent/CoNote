@@ -24,11 +24,23 @@ export function sessionCookieName(nodeEnv: 'development' | 'test' | 'production'
 /** Redis pub/sub channel for access events (docs/WEBSOCKET_PROTOCOL.md §10). */
 export const ACCESS_EVENTS_CHANNEL = 'conote:events:access';
 
+export const ACCESS_EVENT_TYPES = [
+  'session.revoked',
+  'member.role_changed',
+  'member.removed',
+  'workspace.deleted',
+  'page.access_changed',
+] as const;
+export type AccessEventType = (typeof ACCESS_EVENT_TYPES)[number];
+
+/** docs/WEBSOCKET_PROTOCOL.md §10: `session.*` events carry user/session ids, the others workspace/page ids. */
 export interface AccessEvent {
   v: 1;
-  type: 'session.revoked';
-  userId: string;
-  sessionId: string;
+  type: AccessEventType;
+  userId?: string;
+  sessionId?: string;
+  workspaceId?: string;
+  pageId?: string;
   /** ISO 8601 UTC timestamp. */
   at: string;
 }

@@ -101,106 +101,47 @@ async function ensureDocument(client: PoolClient, documentName: string): Promise
   );
 }
 
-
 async function loadDocumentUpdate(documentName: string): Promise<Uint8Array> {
-  const maxAttempts = 5;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const client = await pool.connect();
-    let transactionStarted = false;
-
-    try {
-      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
-      transactionStarted = true;
-
-      await ensureDocument(client, documentName);
-
-      const result = await client.query<{
-        state: Buffer;
-        state_vector: Buffer;
-        folded_seq: string;
-      }>(
-        `SELECT state, state_vector, folded_seq
-         FROM collab_poc_documents
-         WHERE document_name = $1`,
-        [documentName],
-      );
-
-      const row = result.rows[0];
-      if (!row) {
-        throw new Error(`Document row missing: ${documentName}`);
-      }
-
-      const doc = new Y.Doc();
-
-      let state: Uint8Array;
-
-      try {
-        Y.applyUpdate(doc, new Uint8Array(row.state));
-
-        const updates = await client.query<{ update_bytes: Buffer }>(
-          `SELECT update_bytes
-           FROM collab_poc_updates
-           WHERE document_name = $1 AND seq > $2
-           ORDER BY seq`,
-          [documentName, row.folded_seq],
-        );
-
-        for (const update of updates.rows) {
-          Y.applyUpdate(doc, new Uint8Array(update.update_bytes));
-        }
-
-        const reconstructedVector = Y.encodeStateVector(doc);
-
-        if (!Buffer.from(reconstructedVector).equals(row.state_vector)) {
-          throw new Error(
-            `Persisted state vector mismatch while loading ${documentName}`,
-          );
-        }
-
-        state = Y.encodeStateAsUpdate(doc);
-      } finally {
-        doc.destroy();
-      }
-
-      await client.query("COMMIT");
-      transactionStarted = false;
-
-      return state;
-    } catch (error) {
-      if (transactionStarted) {
-        try {
-          await client.query("ROLLBACK");
-        } catch {
-          // Preserve the original error if rollback also fails.
-        }
-      }
-
-      const errorCode =
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error
-          ? error.code
-          : undefined;
-
-      if (errorCode === "40001" && attempt < maxAttempts) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, 50 * 2 ** (attempt - 1)),
-        );
-        continue;
-      }
-
-      throw error;
-    } finally {
-      client.release();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+    await ensureDocument(client, documentName);
+    const result = await client.query<{
+      state: Buffer;
+      state_vector: Buffer;
+      folded_seq: string;
+    }>(
+      `SELECT state, state_vector, folded_seq FROM collab_poc_documents WHERE document_name = $1`,
+      [documentName],
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error(`Document row missing: ${documentName}`);
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, new Uint8Array(row.state));
+    const updates = await client.query<{ update: Buffer }>(
+      `SELECT update_bytes FROM collab_poc_updates
+       WHERE document_name = $1 AND seq > $2 ORDER BY seq`,
+      [documentName, row.folded_seq],
+    );
+    for (const update of updates.rows) {
+      Y.applyUpdate(doc, new Uint8Array(update.update_bytes));
     }
+    const reconstructedVector = Y.encodeStateVector(doc);
+    if (!Buffer.from(reconstructedVector).equals(row.state_vector)) {
+      doc.destroy();
+      throw new Error(`Persisted state vector mismatch while loading ${documentName}`);
+    }
+    const state = Y.encodeStateAsUpdate(doc);
+    doc.destroy();
+    await client.query("COMMIT");
+    return state;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
-
-  throw new Error(
-    `Could not load document ${documentName} after ${maxAttempts} attempts`,
-  );
 }
-
 
 async function storeDocument(
   documentName: string,
@@ -226,7 +167,7 @@ async function storeDocument(
 
     const persisted = new Y.Doc();
     Y.applyUpdate(persisted, new Uint8Array(row.state));
-    const pending = await client.query<{ seq: string; update_bytes: Buffer }>(
+    const pending = await client.query<{ seq: string; update: Buffer }>(
       `SELECT seq, update_bytes FROM collab_poc_updates
        WHERE document_name = $1 AND seq > $2 ORDER BY seq`,
       [documentName, row.folded_seq],
@@ -349,21 +290,17 @@ const server = new Server<SpikeContext>({
   unloadImmediately: false,
   websocketOptions: { maxPayload: 1024 * 1024 },
   extensions: [redis],
-  async onAuthenticate({ token, documentName, requestParameters, connectionConfig }) {
+  async onAuthenticate({ token, documentName, connection, requestParameters }) {
     try {
       const claims = verifyToken(token, documentName);
-      const readOnly = claims.readOnly === true;
-
-      connectionConfig.readOnly = readOnly;
-
+      connection.readOnly = claims.readOnly === true;
       log("authenticated", {
         documentName,
         userId: claims.sub,
-        readOnly,
+        readOnly: connection.readOnly,
         tokenInQuery: requestParameters.has("token"),
       });
-
-      return { userId: claims.sub, readOnly };
+      return { userId: claims.sub, readOnly: connection.readOnly };
     } catch (error) {
       log("auth_rejected", {
         documentName,
@@ -383,51 +320,23 @@ const server = new Server<SpikeContext>({
     log("store_hook", { documentName, clientsCount, origin });
     await storeDocument(documentName, document, clientsCount);
   },
-
-  async beforeHandleAwareness({ states, context, transactionOrigin }) {
-    const source =
-      typeof transactionOrigin === "object" &&
-      transactionOrigin !== null &&
-      "source" in transactionOrigin
-        ? transactionOrigin.source
-        : undefined;
-
-    // Redis-relayed awareness was validated on the originating instance.
-    if (source === "redis") {
-      log("awareness_accepted_from_redis", {
-        stateCount: states.size,
-      });
-      return;
-    }
-
-    // Only authenticated client connections may submit direct awareness.
+  async beforeHandleAwareness({ states, context }) {
     for (const [clientId, state] of states) {
       const user = state.user;
-
-      if (
-        source !== "connection" ||
-        !context?.userId ||
-        typeof user !== "object" ||
-        user === null ||
-        user.id !== context.userId
-      ) {
+      if (!context?.userId || typeof user !== "object" || user === null || user.id !== context.userId) {
         states.delete(clientId);
-
         log("awareness_rejected", {
           clientId,
-          source,
           authenticatedUserId: context?.userId ?? null,
-          claimedUserId:
-            typeof user === "object" && user !== null && "id" in user
-              ? String(user.id)
-              : null,
+          claimedUserId: typeof user === "object" && user !== null && "id" in user
+            ? String(user.id)
+            : null,
         });
       } else {
         state.user = { id: context.userId };
       }
     }
   },
-
   async onStateless({ connection, documentName, payload }) {
     log("stateless_received", { documentName, payload });
     connection.sendStateless(JSON.stringify({ type: "ack", payload }));
@@ -435,9 +344,7 @@ const server = new Server<SpikeContext>({
   async onListen({ port: listeningPort }) {
     log("listening", { port: listeningPort, redisHost, redisPort });
     log("capabilities", {
-      connectionCountApi:
-        typeof (server as unknown as { getConnectionsCount?: () => number })
-          .getConnectionsCount === "function",
+      connectionCountApi: typeof server.getConnectionsCount === "function",
       maxPayloadBytes: 1024 * 1024,
       storeDebounceMs: Number(process.env.STORE_DEBOUNCE_MS ?? "2000"),
       storeMaxDebounceMs: Number(process.env.STORE_MAX_DEBOUNCE_MS ?? "10000"),

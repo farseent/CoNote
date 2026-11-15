@@ -1,7 +1,7 @@
 # CoNote – Testing Strategy
 
-**Status:** Phase 1a test foundation (reported passing by the owner: 9 files, 59 tests) plus **Phase 2 authentication tests, run by Claude in a preparation environment: 17 files, 228 tests passed (115 unit + 113 integration), twice in a row** (§8.0a). The Phase 1b spike harness is under `spikes/collab-poc/`. Tests for workspaces, pages, editing and collaboration do not exist yet. **Browser E2E (Playwright) is not implemented.**
-**Last updated:** 2026-11-13
+**Status:** Phase 1a test foundation (reported passing by the owner: 9 files, 59 tests) plus **Phase 2 authentication tests, run by Claude in a preparation environment: 17 files, 228 tests passed (115 unit + 113 integration), twice in a row** (§8.0a). The Phase 1b spike harness is under `spikes/collab-poc/`. **Phase 3 tests were run by the owner on 2026-11-15 against PostgreSQL and Redis: `pnpm check` passed with 482 tests** (§8.0b). Tests for editing and collaboration do not exist yet. **Browser E2E (Playwright) is not implemented.**
+**Last updated:** 2026-11-15
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); requirements and metrics (`FR-*`, `NFR-*`, `PERF-*`) in [PROJECT_MASTER.md](PROJECT_MASTER.md); guarantees `G1`–`G7` in [ARCHITECTURE.md](ARCHITECTURE.md) §8; phases and acceptance criteria (`AC-*`) in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
@@ -229,6 +229,26 @@ Environment (not the owner's machine and not CI): Linux x86-64, 1 vCPU, Node 24.
 
 **Not tested, stated plainly:** real browsers (cookie storage, form behaviour, layout); any Docker image build; the Compose `apps` profile; `prisma migrate deploy`/`migrate diff` for the Phase 2 migration; PostgreSQL 17; load behaviour of the rate limiter or Argon2 under concurrency beyond the 8-hash timing above; the web app behind a real reverse proxy.
 
+Owner-reported after the table above: the Phase 2 GitHub Actions workflow run, initially deferred, passed (recorded 2026-11-15; run date and commit not supplied).
+
+### 8.0b Phase 3 tests (written 2026-11-14; run by the owner 2026-11-15)
+
+Phase 3 was written without PostgreSQL, Redis or pnpm, so the tests were first run by the owner on 2026-11-15 (Windows, PostgreSQL 17 on host port 5433, Redis 7). Result: `pnpm check` passed (lint, Prettier, typecheck, tests) with **482 tests**, including the permission matrix (133 cases) and the DB constraint tests. Two test-side problems were found and fixed: the matrix `PUT`/`DELETE page permission` actions overrode the VIEWER actor (hiding the page from it, a correct 404), so they now target a separate member; and `tests/boundaries.test.ts` needed a 30 s timeout under a parallel full run. Flags are not forwarded by `pnpm test -- --flag`; use `pnpm test --testTimeout=20000`. The manual browser walkthrough (HANDOVER §8.6 item 5) also passed. Details: HANDOVER §8.8.
+
+| File | Category | Covers |
+|---|---|---|
+| `packages/shared/src/permissions.test.ts` | UT | Role order, D23 resolution incl. **exhaustive** role × override-chain (depth 0–4, 4 686 combinations, AC-3.1), management rules (invite, role change, removal) |
+| `packages/shared/src/page-position.test.ts` | UT | Fractional keys: validity, ordering over 2 000 random insertions, append growth, re-spacing |
+| `packages/shared/src/workspaces.test.ts` | UT | Phase 3 request schemas, invitation link build/parse, email masking |
+| `packages/db/test/workspace-constraints.int.test.ts` | DB | One owner (index + deferred trigger, transfer in one transaction, workspace delete), invitation CHECKs/partial unique index, composite parent FK, self-parent, position format, cascades (AC-3.4, 3.7) |
+| `apps/api/test/workspaces.int.test.ts` | API, SEC | WS-01–09; INV-01–07: single use, concurrent accept, expiry (DB-set), email binding, decline, revoke/resend rotation, token never stored/logged, existence hiding (AC-3.3, 3.5, 3.9) |
+| `apps/api/test/pages.int.test.ts` | API, DB | PAGE-01–09: ordering and re-spacing, depth, INVALID_MOVE cases, breadcrumbs, batch delete/restore, purge, retention job (AC-3.6, 3.7) |
+| `apps/api/test/permissions.int.test.ts` | PERM, API | Overrides, inheritance, `NONE` hiding, admin non-restrictability, breadcrumb filtering, access events, ACT-01/02, activity metadata hygiene (AC-3.8, 3.10) |
+| `apps/api/test/permission-matrix.int.test.ts` | PERM | 19 actions × {OWNER, ADMIN, EDITOR, COMMENTER, VIEWER, non-member, no session} (AC-3.2) |
+| `apps/web/src/lib/page-tree.test.ts`, `apps/web/src/components/workspace-flows.test.tsx` | UT (jsdom) | Tree building/ordering, dashboard, create form, tree navigation, member and invitation management, invite page |
+
+**Not covered, stated plainly:** AC-3.11 automated browser E2E (Playwright is not implemented; the API-level flow tests and the owner's manual walkthrough approximate it); the page-view, settings, trash and permissions-panel components have no component tests; real-browser layout/responsiveness; concurrency beyond the concurrent-accept test; the effect of a PostgreSQL collation on ordering (ordering is done in the application, D50).
+
 ### 8.1 Requirements
 
 | Requirement group | Primary categories | Phase |
@@ -290,7 +310,7 @@ GitHub Actions is the configured and owner-reported passing CI provider. The cur
 
 ## 11. Open items
 
-GitHub Actions is the confirmed CI provider; the Phase 1a workflow is configured and the owner reports a passing run on 2026-11-12.
+GitHub Actions is the confirmed CI provider; the Phase 1a workflow is configured and the owner reports a passing run on 2026-11-12. The owner also reports a passing Phase 2 run (recorded 2026-11-15). CI has not been run for Phase 3.
 
 | Item | Resolved in |
 |---|---|

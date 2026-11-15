@@ -2,6 +2,7 @@ import { apiEnvSchema, parseEnv } from '@conote/shared';
 import { buildApp } from './app.js';
 import { createApiConfig } from './config.js';
 import { createDependencies } from './dependencies.js';
+import { startPagePurge } from './jobs/page-purge.js';
 import { startSessionCleanup } from './jobs/session-cleanup.js';
 import { createLogger } from './logger.js';
 
@@ -18,6 +19,12 @@ async function main(): Promise<void> {
     logger,
   });
 
+  const stopPagePurge = startPagePurge({
+    prisma: dependencies.prisma,
+    clock: dependencies.clock,
+    logger,
+  });
+
   let shuttingDown = false;
   const shutdown = async (signal: string): Promise<void> => {
     if (shuttingDown) return;
@@ -25,6 +32,7 @@ async function main(): Promise<void> {
     logger.info({ signal }, 'shutting down');
     try {
       stopSessionCleanup();
+      stopPagePurge();
       await app.close();
       process.exit(0);
     } catch (err) {

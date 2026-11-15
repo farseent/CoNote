@@ -15,6 +15,7 @@ const provider = new HocuspocusProvider({
   name: documentName,
   document: new Y.Doc(),
   token,
+  broadcast: false,
   onSynced: () => {
     provider.awareness?.setLocalStateField("user", { id: userId, name: userId });
     process.stdout.write("READY\n");

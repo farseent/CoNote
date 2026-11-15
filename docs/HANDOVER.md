@@ -1,10 +1,12 @@
 # CoNote – Handover
 
-**Last updated:** 2026-11-13
+**Last updated:** 2026-11-15
 
-**Current phase:** Phase 2 – Authentication and User Management. **Implementation and owner-run local acceptance checks are complete (2026-11-13, §7.9). D41–D47 are explicitly accepted. Final Phase 2 sign-off remains pending; GitHub Actions CI for Phase 2 was explicitly deferred by the owner and has not been run.** The owner issued the Phase 2 task on 2026-11-13; that instruction was treated as approval to start Phase 2 although the earlier formal Phase 1 closure sign-off (§4) was not recorded in the repository. The Phase 1 historical items listed as open in §1 remain open.
+**Current phase:** Phase 3 – Workspaces, Pages and Permissions. **Implemented on 2026-11-14 and owner-verified locally on 2026-11-15 (§8.8):** migration and drift check, lint, format check, typecheck, `pnpm check` (482 tests) and the manual browser walkthrough all passed. **Decisions D48–D53 were accepted by the owner on 2026-11-15; final Phase 3 acceptance is pending.** GitHub Actions CI and the Docker `apps` profile have not been run for Phase 3.
 
-**Next phase after acceptance:** Phase 3 – Workspaces, Pages and Permissions. **Not started.** Do not start Phase 3 until the owner gives final Phase 2 sign-off and the deferred CI decision is resolved.
+**Phase 2 status carried forward:** implementation and owner-run local acceptance are complete (§7.9); D41–D47 accepted; **the owner reports that the Phase 2 GitHub Actions CI run passed (it had been deferred on 2026-11-13); final Phase 2 sign-off was never recorded.** The owner issued the Phase 3 task on 2026-11-14; as with Phase 2, that instruction was treated as approval to start Phase 3 although the sign-off above is still outstanding. The sign-off remains an open item.
+
+**Next step:** the owner records Phase 3 acceptance (and the open Phase 2 sign-off/CI items); then Phase 4 – Rich-Text Editor. **Do not start Phase 4 until Phase 3 is accepted.**
 
 Read `CLAUDE.md` first. This file is the source of truth for current project status.
 
@@ -16,13 +18,13 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 
 | Repository | pnpm monorepo with `apps/web`, `apps/api`, `apps/collab`, `packages/db`, `packages/shared`, `packages/editor`; root scripts, CI, Dockerfiles and local Compose configuration are present |
 
-| Product features | **Implemented (Phase 2): registration, login, logout, DB-backed sessions, session list/revoke, password change, profile (display name, presence colour) with web pages.** Not implemented: workspaces, page management, rich-text editor, production Yjs collaboration, presence, comments, version history, avatars (Phase 4), email verification, password reset |
+| Product features | **Implemented but unverified (Phase 3): workspaces, membership and roles, invitations (link-based), nested pages, soft delete/restore/purge, page-level permissions, activity log, and the web UI for all of these (§8).** **Implemented (Phase 2): registration, login, logout, DB-backed sessions, session list/revoke, password change, profile (display name, presence colour) with web pages.** Not implemented: rich-text editor, production Yjs collaboration, presence, comments, version history, avatars (Phase 4), email verification, password reset |
 
-| API | Fastify foundation, `/health` and `/ready`, and (Phase 2) `AUTH-01`–`AUTH-07`, `USER-01`–`USER-02` under `/api/v1`, with CSRF checks, rate limiting, helmet, CORS, session cleanup job |
+| API | Fastify foundation, `/health` and `/ready`, (Phase 2) `AUTH-01`–`AUTH-07`, `USER-01`–`USER-02`, and (Phase 3, unverified) `WS-01`–`WS-09`, `INV-01`–`INV-07`, `PAGE-01`–`PAGE-09`, `PP-01`–`PP-03`, `ACT-01`–`ACT-02` under `/api/v1`, with CSRF checks, rate limiting, helmet, CORS, session cleanup job |
 
 | Collaboration server | Hocuspocus shell and operational endpoints implemented. It deliberately rejects every document connection; this is not a working collaboration service (D38) |
 
-| Database | Prisma 7.10.1; baseline migration plus `20261112120000_auth_users_sessions` (`User`, `Session`). That migration is hand-written SQL. The owner's local `migrate deploy`, `migrate status` and scratch-database `migrate:dev` drift check were clean on 2026-11-13 (§7.9). No document persistence exists |
+| Database | Prisma 7.10.1; baseline migration, `20261112120000_auth_users_sessions` (`User`, `Session`) and, **unapplied and unverified**, `20261114090000_workspaces_pages_permissions` (Phase 3 models, hand-written SQL incl. the deferred one-owner trigger). That migration is hand-written SQL. The owner's local `migrate deploy`, `migrate status` and scratch-database `migrate:dev` drift check were clean on 2026-11-13 (§7.9). No document persistence exists |
 
 | Local infrastructure | PostgreSQL 17 and Redis 7 Compose services reported healthy. PostgreSQL host port 5433 maps to container port 5432; Redis host port 6379 |
 
@@ -32,7 +34,8 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 
 | Phase 1b spike | Harness and report at `spikes/collab-poc/` and `docs/spikes/phase-1-collab-spike.md`; S1–S11 executed, 11/11 PASS. Root `pnpm check` passed; remaining evidence reconciliation and owner review are in progress |
 
-| Phase 2 | Implemented and owner-verified locally. Lint, format check and typecheck passed; 228 tests passed with `--testTimeout=20000`; migration deploy/status and scratch-database drift check passed; browser acceptance checks completed; current-session indicator fixed; Docker app images built and services started; API `/ready` returned HTTP 200 with PostgreSQL and Redis healthy. D41–D47 accepted. **GitHub Actions CI for Phase 2 deliberately deferred and not run. Final owner sign-off pending.** |
+| Phase 2 | Implemented and owner-verified locally. Lint, format check and typecheck passed; 228 tests passed with `--testTimeout=20000`; migration deploy/status and scratch-database drift check passed; browser acceptance checks completed; current-session indicator fixed; Docker app images built and services started; API `/ready` returned HTTP 200 with PostgreSQL and Redis healthy. D41–D47 accepted. GitHub Actions CI for Phase 2 passed (owner-reported; initially deferred). **Final owner sign-off pending.** |
+| Phase 3 | **Implemented 2026-11-14; owner-verified locally 2026-11-15.** Schema validates, client generates, migration deploys and the scratch-database drift check is clean; lint, format check and typecheck pass; `pnpm check` passes with 482 tests (permission matrix 133/133); manual browser walkthrough passed. D48–D53 accepted 2026-11-15. **Not yet done:** final owner acceptance, GitHub Actions CI, Docker `apps` profile check. See §8.8. |
 
 ### Decisions and open items
 
@@ -441,7 +444,10 @@ The full scenario evidence and remaining limitations are recorded in docs/spikes
 | 2026-11-12 | Phase 1b harness and report scaffold prepared; no S1–S11 results claimed at preparation time. |
 | 2026-11-12 | Phase 1b S1–S11 executed (11/11 PASS); root pnpm check passed (9 test files, 59 tests); U1/U2 explicitly owner-approved; handover updated for evidence-based review. |
 | 2026-11-13 | Phase 2 (authentication and user management) implemented and tested in a preparation environment; docs updated; decisions D41–D47 proposed; V7 resolved by measurement. Awaiting owner verification (§7). |
-| 2026-11-13 | Owner verification of Phase 2 completed locally: migrations/drift check, lint/format/typecheck, 228 tests (20 s timeout), manual browser acceptance, Docker app images/startup and API readiness passed; current-session indicator fixed. D41–D47 accepted. Phase 2 GitHub Actions CI explicitly deferred/not run; final sign-off pending (§7.9). |
+| 2026-11-14 | Phase 3 (workspaces, pages, permissions) implemented in a preparation environment that could not run the test suite; docs updated; decisions D48–D53 proposed; stale `apps/web/src/app/page.tsx` removed again. Awaiting owner verification (§8). |
+| 2026-11-15 | Owner verification of Phase 3 completed locally (§8.8): migration/drift check, lint/format/typecheck, `pnpm check` (482 tests) and manual browser acceptance passed. Fixes made during verification: restored missing `packages/shared` files; seven `react-hooks/set-state-in-effect` lint errors in the web app; matrix test override target; boundaries test timeout. D48–D53 accepted by the owner the same day; Phase 3 final acceptance pending. |
+| 2026-11-15 | Owner reports that the Phase 2 GitHub Actions CI run, previously deferred, was run and passed. The run's date and commit are not recorded here. |
+| 2026-11-13 | Owner verification of Phase 2 completed locally: migrations/drift check, lint/format/typecheck, 228 tests (20 s timeout), manual browser acceptance, Docker app images/startup and API readiness passed; current-session indicator fixed. D41–D47 accepted. Phase 2 GitHub Actions CI explicitly deferred/not run at that time (later run and passed, see the 2026-11-15 entry below); final sign-off pending (§7.9). |
 
 ## 7. Phase 2 – implementation and verification record (2026-11-13)
 
@@ -492,7 +498,7 @@ Run by Claude in a preparation environment (details and limits: TESTING §8.0a):
 ### 7.6 Not verified and known limitations
 
 - **Browser E2E:** Playwright browser E2E tests are not implemented. Owner-run manual browser acceptance checks passed; jsdom and real-Next.js HTTP tests remain the automated frontend coverage (AC-2.6 is therefore partly met, not fully met).
-- **GitHub Actions CI for Phase 2:** deliberately deferred by the owner on 2026-11-13. It was **not run** and must not be recorded as passed. The historical Phase 1a/1b CI pass in §3 remains a separate result.
+- **GitHub Actions CI for Phase 2:** deferred by the owner on 2026-11-13; the owner has since run it and **reports that it passed** (recorded 2026-11-15; the run's date and commit were not supplied). The historical Phase 1a/1b CI pass in §3 remains a separate result.
 - **Production proxy deployment:** the D43 trusted-proxy configuration is accepted, but the actual production reverse proxy and hosting target are not selected (U10). Production must place the web tier behind a trusted reverse proxy that sets `X-Forwarded-For`; do not expose the web tier directly.
 - Rate-limit values and the Argon2 cost are starting values, not tuned (no target hardware or traffic estimate exists).
 - No email verification, password reset, breached-password check, account lockout notification, CSP on the web app, or audit log (not in scope).
@@ -510,7 +516,7 @@ Owner-run verification record is in §7.9. Results:
 4. Manual browser acceptance: **Completed**. Registration/login, reload persistence, protected-page redirect, generic invalid-credential message, profile display-name and presence-colour changes, second-session listing/revocation, password-change revocation, logout/back-button protection, and the current-session indicator were checked. The current-session badge was made visible by separating the truncated user-agent text from the non-shrinking badge.
 5. Optional Docker `apps` profile: **Passed**. API, web, collab and migration images built; containers started; migration exited 0 with no pending migrations; owner verified the application in the browser; `GET http://localhost:4000/ready` returned HTTP 200 with `postgres: healthy` and `redis: healthy`.
 6. D41–D47: **Accepted by the owner on 2026-11-13** (DECISIONS.md). D43's trusted-proxy design is accepted; actual production proxy/hosting selection remains open (U10).
-7. Phase 2 GitHub Actions CI: **Deferred by explicit owner instruction; not run and not passed.** Do not mark Phase 2 CI as passed until a real workflow run succeeds.
+7. Phase 2 GitHub Actions CI: **Passed (owner-reported, recorded 2026-11-15).** Originally deferred by explicit owner instruction on 2026-11-13.
 
 ### 7.8 Notes for Phase 3
 
@@ -520,7 +526,7 @@ New protected endpoints go inside the authenticated scope in `apps/api/src/route
 
 Environment: Windows laptop, Git Bash/Windows terminal, Node.js 24.18.0, pnpm 12.18.0, Docker 29.9.2, PostgreSQL 17 and Redis 7 from the local Compose file.
 
-**Owner-run Phase 2 acceptance checks are complete, except Phase 2 GitHub Actions CI, which the owner explicitly deferred. Final Phase 2 sign-off has not yet been recorded.**
+**Owner-run Phase 2 acceptance checks are complete, including Phase 2 GitHub Actions CI (owner-reported pass, recorded 2026-11-15). Final Phase 2 sign-off has not yet been recorded.**
 
 | Verification area | Result | Evidence / qualification |
 |---|---|---|
@@ -534,7 +540,7 @@ Environment: Windows laptop, Git Bash/Windows terminal, Node.js 24.18.0, pnpm 12
 | Docker application browser check | **Passed** | Owner confirmed the Docker-hosted application had already been verified in the browser |
 | API readiness in Docker | **Passed** | `curl.exe -i http://localhost:4000/ready` returned HTTP 200: `{"status":"ready","service":"api","dependencies":{"postgres":"healthy","redis":"healthy"}}` |
 | D41–D47 owner decisions | **Accepted** | All seven decisions explicitly accepted by the owner on 2026-11-13; details and Option A selections are recorded in DECISIONS.md |
-| GitHub Actions CI for Phase 2 | **Deferred / not run** | Owner explicitly chose to hold GitHub CI for now. This is not a pass and must not be represented as one |
+| GitHub Actions CI for Phase 2 | **Passed (owner-reported)** | Originally deferred on 2026-11-13; the owner has since run it and reported a pass (recorded 2026-11-15) |
 | Production hosting / proxy deployment | **Open** | D43 design accepted, but provider/topology selection remains U10 and must be completed before production deployment |
 
 #### Findings and qualifications retained from the verification process
@@ -547,8 +553,122 @@ Environment: Windows laptop, Git Bash/Windows terminal, Node.js 24.18.0, pnpm 12
 
 #### Remaining before Phase 2 final sign-off
 
-- The owner deferred GitHub Actions CI. Before treating Phase 2 as fully closed under a process that requires CI, run the Phase 2 workflow and record its actual result. Until then, CI remains **deferred/not run**, not passed.
+- Phase 2 GitHub Actions CI was run by the owner and reported as passed (recorded 2026-11-15). The `web-auth.int.test.ts` stability note above still applies.
 - Decide whether to raise the default timeout for spawn-heavy tests and document/fix root `.env` loading for `pnpm dev:web`.
 - Select the production hosting and reverse-proxy topology (U10) before deployment. This does not block local Phase 2 feature verification, but is a production deployment requirement.
 - Record the owner's explicit final Phase 2 acceptance before starting Phase 3.
 
+## 8. Phase 3 – implementation record (2026-11-14)
+
+**Sections 8.1–8.7 describe the implementation as delivered on 2026-11-14 and were written before anything was executed; the owner's verification results are in §8.8.**
+
+### 8.1 What was implemented
+
+- **Database** (`packages/db`): models `Workspace`, `WorkspaceMember`, `Invitation`, `Page`, `PagePermission`, `ActivityLog`; enums `WorkspaceRole`, `PageAccessRole`, `InvitationStatus` (+`DECLINED`, D48); migration `20261114090000_workspaces_pages_permissions` with the one-owner partial index and deferred trigger, invitation CHECKs and partial unique index, page self-parent and position CHECKs, and a Prisma-managed composite parent foreign key (DATABASE_SCHEMA §12).
+- **Shared** (`packages/shared`): `permissions.ts` (roles, `resolveEffectivePageRole`, invite/role-change/removal rules), `page-position.ts` (fractional keys, re-spacing), `workspaces.ts` (all Phase 3 schemas, invite-link helpers, email masking), extended `AccessEvent`.
+- **API** (`apps/api`): `workspaces/` (`AccessService`, activity logging, access-event publishing, placement, DTOs, pagination) and routes `workspaces.ts` (WS-01–09), `invitations.ts` (INV-01–07), `pages.ts` (PAGE-01–09), `page-permissions.ts` (PP-01–03), `activity.ts` (ACT-01–02); `plugins/account-limiter.ts`; `jobs/page-purge.ts` wired into `main.ts`; config gained `appUrl` and the `invitation` rate-limit rule.
+- **Web** (`apps/web`): workspace dashboard, create workspace, workspace shell with responsive page sidebar and nested navigation, page view (breadcrumbs, title edit, move, delete, permissions panel), members and invitations management, settings (rename, transfer ownership, leave, delete with name confirmation), trash, and the public `/invite` accept/decline page. The stale Phase 1 `app/page.tsx` was removed (it shadows the home page, §7.9 finding 1; the uploaded ZIP still contained it).
+- **Documentation:** DECISIONS D48–D53, API_CONTRACTS (INV-07, §15), DATABASE_SCHEMA §12, IMPLEMENTATION_PLAN, TESTING §8.0b, ARCHITECTURE §20, PROJECT_MASTER and WEBSOCKET_PROTOCOL status lines, this file.
+
+### 8.2 Acceptance criteria (IMPLEMENTATION_PLAN, Phase 3)
+
+Status means "a test exists"; **none has been run.**
+
+| AC | Test written | Notes |
+|---|---|---|
+| 3.1 exhaustive permission function | Yes (`permissions.test.ts`) | **Executed under a shim: 14/14 passed**; not yet under Vitest |
+| 3.2 permission matrix | Yes (`permission-matrix.int.test.ts`) | Not run |
+| 3.3 404 vs 403 | Yes (matrix, `permissions.int.test.ts`) | Not run |
+| 3.4 second owner / OWNER invitation rejected | Yes (`workspace-constraints.int.test.ts`) | Not run |
+| 3.5 invitation single-use, expiry, email-bound, hash only | Yes (`workspaces.int.test.ts`) | Expiry is set directly in the database, not by advancing the shared clock (sessions would expire); not run |
+| 3.6 INVALID_MOVE cases | Yes (`pages.int.test.ts`) | Not run |
+| 3.7 batch delete/restore, purge cascade | Yes (API and DB tests) | Not run |
+| 3.8 member removal deletes overrides | Yes | Not run |
+| 3.9 ownership transfer, password required | Yes | Not run |
+| 3.10 activity per catalogued action | Partly | Only the actions Phase 3 writes are checked, and not each one individually; **gap** |
+| 3.11 E2E | **No** | Playwright not implemented; API-level flow tests approximate it |
+| 3.12 U9 out of scope, U6 recorded | Documented | D52 |
+
+### 8.3 What was and was not executed
+
+Executed in the preparation environment (Node 22.23, TypeScript 6.0.3, tsx; **no PostgreSQL, Redis, pnpm, network or installed dependencies**): the fractional-position property test (3 000 random insertions) and the shared permission and position unit tests (14 + 7 passed) and the web page-tree tests (7 passed) under a ~30-line `describe/it/expect` shim that is **not Vitest**; a TypeScript **parse** of all 131+ `.ts/.tsx` files (0 syntax errors).
+
+Not executed: `pnpm install`, Prisma client generation, **type checking** (Phase 3 code depends on the regenerated Prisma client types and has never been compiled), ESLint, Prettier, any Vitest suite, the migration, `next build`, any browser. Expect to fix some type or lint errors on first compile; see §8.5.
+
+### 8.4 Deviations from the design documents
+
+1. **INV-07 (decline) and `DECLINED`** added (D48); the design had no invitee-side rejection.
+2. Composite parent FK is named `pages_workspaceId_parentId_fkey` and declared in `schema.prisma` (DATABASE_SCHEMA §12) instead of the hand-written name in §5.
+3. Not built (D52): invitation email adapter, development seed script, Playwright E2E, page search (never in scope), PAGE-10 (Phase 6).
+4. Pagination exists in the API (invitations, trash, activity) but the web UI requests `limit=100` and has no paging controls; the workspace activity feed has no web view.
+5. Page `icon` is supported by the API but has no UI.
+6. Web `DELETE` calls send the same `{}` JSON body as other mutations; `WS-05` requires its `confirmName` body.
+
+### 8.5 Findings and risks to check first
+
+1. **Never compiled.** Highest risk: Prisma-generated types. Check `schema.prisma` validates (the composite self-relation `Page.parent` with `onDelete: Cascade` over a nullable + required field pair is the least conventional part), then `pnpm db:generate`, `pnpm typecheck`.
+2. **Migration hand-written.** Run `pnpm db:migrate:deploy`, then the scratch-database `migrate:dev` drift check. A partial unique index or constraint that Prisma reports as drift would show up here; if so, adjust per DATABASE_SCHEMA §12.
+3. **`$queryRaw` with `::uuid` casts** (recursive CTEs, advisory lock) assume the `pg` driver adapter returns `int`/`text` columns as numbers/strings.
+4. **Existing tests:** `security.int.test.ts` and `auth-harness.ts` were edited (new `invitation` rate-limit key, `APP_URL`, workspace cleanup before user cleanup).
+5. **Test environment:** the new API tests need the same PostgreSQL/Redis as the Phase 2 integration tests. The default 5 s timeout was already borderline (§7.9 finding 2); run with `--testTimeout=20000`. The matrix test is large (about 130 cases).
+6. **Account deletion** (future) must handle owned workspaces first (DATABASE_SCHEMA §12).
+7. **Rebalancing** of sibling keys is exercised by one test that forces a long key; real append growth is covered only by the pure unit test.
+
+### 8.6 Owner verification checklist
+
+1. `pnpm install` (no new dependencies were added), `pnpm db:generate`.
+2. `pnpm db:migrate:deploy`, `pnpm db:migrate:status`; scratch-database `migrate:dev` must propose nothing new.
+3. `pnpm lint`, `pnpm format:check`, `pnpm typecheck` (expect to fix type/format issues; send the output back).
+4. `pnpm test -- --testTimeout=20000`. Report failures with their output.
+5. Browser: sign in, create a workspace, create root/child pages, collapse/expand, rename a page, move it, delete and restore it from Trash; invite a second user (copy link), open it in another browser profile, register/sign in with the invited email, accept; change that member's role; set a page override to No access and confirm the page disappears for them; remove the member; try a workspace delete with a wrong then the right name. Check the layout at phone width (sidebar toggle).
+6. Decide D48–D53 and the Phase 2 sign-off/CI items.
+
+### 8.8 Owner verification results (2026-11-15)
+
+Run locally by the owner (Windows, Git Bash, PostgreSQL 17 on host port 5433, Redis 7) following §8.6.
+
+| Check | Result | Notes |
+|---|---|---|
+| `pnpm install`, `prisma validate`, `pnpm db:generate` | **Passed** | The `Page.parent` composite self-relation (the risk flagged in §8.5 item 1) was accepted |
+| `pnpm db:migrate:deploy` / `migrate:status` | **Passed** | `20261114090000_workspaces_pages_permissions` applied; schema up to date |
+| Scratch-database drift check | **Passed** | All three migrations applied to an empty database; second `migrate:dev` reported "Already in sync"; no new migration proposed |
+| `pnpm lint`, `pnpm format:check`, `pnpm typecheck` | **Passed** | After the fixes below |
+| `pnpm check` | **Passed** | 482 tests, including the permission matrix (133/133) and the DB constraint tests (one-owner trigger and index) against real PostgreSQL and Redis |
+| Manual browser walkthrough (§8.6 item 5) | **Passed** | Owner reported all flows working: workspace and page tree, rename, move, delete/restore, invitations across two sessions, role change, page override to No access, member removal, workspace delete confirmation, phone-width layout |
+
+**Changes made during verification** (no API behaviour was changed):
+
+1. `packages/shared`: files from the Phase 3 delivery (`permissions.ts`, `page-position.ts`, `workspaces.ts`, the extended `AccessEvent` and their exports) were missing from the working tree on first compile; restoring them cleared roughly 150 type errors in `apps/api`.
+2. Web lint: seven `react-hooks/set-state-in-effect` errors fixed. `invite-accept.tsx` and `workspace-dashboard.tsx` read the URL fragment and the stored invitation with `useSyncExternalStore`; `page-view.tsx` and `workspace-shell.tsx` are wrapped so they remount per `pageId` / `workspaceId` (`key`), keep a local title draft instead of syncing it in an effect, and open ancestors by adjusting state during render; `use-load.ts` derives `loading` by comparing the settled request with the current one instead of setting it in an effect. The public `useLoad` shape is unchanged. See the note under D53.
+3. `apps/api/test/permission-matrix.int.test.ts`: the `PUT`/`DELETE page permission` actions applied a `NONE` override to the VIEWER actor, which hid the page from that actor and produced a correct 404 where the test expected 403. They now target a separate `target` member who never acts.
+4. `tests/boundaries.test.ts`: the `describe` has a 30 s timeout; the first ESLint call is slow under a parallel full run and exceeded the 5 s default.
+
+**Findings**
+
+- `pnpm test -- --testTimeout=20000` does **not** forward the flag (the `--` is passed through to Vitest). Use `pnpm test --testTimeout=20000`.
+- §8.2 "Not run" entries in the Evidence column predate this verification; the automated rows are now covered by the results above.
+
+**Still open**
+
+- Final owner acceptance of Phase 3 and the Phase 2 final sign-off (§7.9). D48–D53 were accepted by the owner on 2026-11-15.
+- GitHub Actions CI for Phase 3 and the optional Docker `apps` profile have not been run.
+- Known limitations in §8.4 stand unchanged (no paging controls, no activity-feed view, no page icon UI).
+
+### 8.7 Suggested commit message
+
+```
+feat: Phase 3 workspaces, pages and permissions
+
+- db: workspaces, members, invitations, pages, page permissions, activity log;
+  one-owner deferred trigger, invitation and page constraints
+- shared: permission resolution (D23), fractional page positions, Phase 3 schemas
+- api: WS-01..09, INV-01..07 (decline added), PAGE-01..09, PP-01..03, ACT-01..02;
+  per-workspace advisory lock, access events, page purge job
+- web: workspace dashboard, shell with page tree, members/invitations, settings,
+  trash, permissions panel, invite page
+- tests: exhaustive permission unit tests, permission matrix, API/DB/web tests
+- docs: D48-D53, API/DB/testing/architecture updates, HANDOVER
+
+Verified locally: pnpm check passes (482 tests); migration drift check and manual
+browser acceptance passed (see docs/HANDOVER.md section 8.8).
+```

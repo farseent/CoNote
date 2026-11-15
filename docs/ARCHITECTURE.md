@@ -1,7 +1,7 @@
 # CoNote – Architecture
 
 **Status:** Phase 1 infrastructure and **Phase 2 authentication (§10)** are implemented and locally verified by the owner. Decisions D41–D47 were accepted by the owner on 2026-11-13. The collaboration architecture, persistence model and the remaining product features remain design-only.
-**Last updated:** 2026-11-13
+**Last updated:** 2026-11-14
 
 Decision IDs (`D#`) and unresolved IDs (`U#`) are defined in [DECISIONS.md](DECISIONS.md). Requirement IDs (`FR-*`, `NFR-*`, `PERF-*`) are in [PROJECT_MASTER.md](PROJECT_MASTER.md). Statements marked **(to verify)** are assumptions that the Phase 1 spike or a named phase must confirm before they are relied on (collected in §18).
 
@@ -507,3 +507,11 @@ Not fetched during Phase 0 (confirm when implementing):
 - Next.js rewrites – https://nextjs.org/docs/app/api-reference/config/next-config-js/rewrites
 - OWASP cheat sheets (password storage, session management, CSRF) – https://cheatsheetseries.owasp.org/
 - Fastify – https://fastify.dev/docs/latest/ · `jose` – https://github.com/panva/jose
+
+## 20. Phase 3: authorization and structural consistency (2026-11-14)
+
+- **Single authorization path:** every workspace/page decision uses `AccessService` (`apps/api/src/workspaces/access.ts`) and the pure functions in `packages/shared/src/permissions.ts` (D23). Effective page role = non-member → none; Owner/Admin → full; else the nearest override on the page or an ancestor (found by a recursive CTE); else the workspace role. Resources the caller cannot see are `404`; insufficient role is `403`.
+- **Structural lock (D49):** page tree and membership mutations take a per-workspace transaction advisory lock, so cycle/depth checks, sibling ordering and ownership changes are race-free within a workspace.
+- **Access events:** after the transaction commits, the API publishes `member.role_changed`, `member.removed`, `workspace.deleted` and `page.access_changed` to the Redis access-event channel (best effort; D22). The collaboration server does not consume them yet (Phase 6).
+- **Jobs:** `page-purge` deletes pages in the trash longer than 30 days (every 6 hours, idempotent), alongside `session-cleanup`.
+- **Web:** server route pages guard; client components load through the typed API client (D53).

@@ -1,7 +1,7 @@
 # CoNote – REST API Contracts
 
-**Status:** Implemented: operational endpoints `GET /health` and `GET /ready` (Phase 1) and **`AUTH-01`–`AUTH-07` and `USER-01`–`USER-02` (Phase 2; see §3.1 and §4.1 for confirmed behaviour and differences from the design)**. Phase 2 decisions D41–D47 were accepted by the owner on 2026-11-13. All other endpoints in this document remain design-only and are not implemented.
-**Last updated:** 2026-11-13
+**Status:** Implemented: operational endpoints `GET /health` and `GET /ready` (Phase 1) and **`AUTH-01`–`AUTH-07` and `USER-01`–`USER-02` (Phase 2; see §3.1 and §4.1 for confirmed behaviour and differences from the design)**. Phase 2 decisions D41–D47 were accepted by the owner on 2026-11-13. **Phase 3 (implemented 2026-11-14; owner-verified locally 2026-11-15; decisions D48–D53 accepted by the owner on 2026-11-15): `WS-01`–`WS-09`, `INV-01`–`INV-07` (INV-07 is new), `PAGE-01`–`PAGE-09`, `PP-01`–`PP-03`, `ACT-01`–`ACT-02`; see §15 for the implemented behaviour and differences from the design.** All other endpoints (`PAGE-10`, comments, versions, assets, collaboration) remain design-only and are not implemented.
+**Last updated:** 2026-11-15
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md). Models are in [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md). Collaboration traffic (Yjs sync, awareness, application events, version create/restore) is **not** REST; see [WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md).
 
@@ -246,6 +246,11 @@ Invitation links have the form `<APP_URL>/invite#token=<token>`; the token is in
 - **Response `200`:** `{ "workspace": Workspace }`. Logs `member.joined`.
 - **Errors:** `400 INVITATION_INVALID`, `401`, `429`.
 
+### INV-07 `POST /api/v1/invitations/decline` (added in Phase 3, D48)
+- **Auth:** Session. **Rate limited (strict).** **Request:** `{ "token": string }`.
+- **Rules:** same checks as `INV-06` (pending, unexpired, signed-in email equals the invited email). The invitation becomes `DECLINED`; no membership is created. The address may be invited again.
+- **Response `200`:** `data: null`. Logs `member.declined`. **Errors:** `400 INVITATION_INVALID`, `401`, `429`.
+
 ## 7. Pages (`PAGE`)
 
 ### PAGE-01 `POST /api/v1/workspaces/:workspaceId/pages`
@@ -413,3 +418,25 @@ Not under `/api/v1`; not proxied through the web app; used by orchestration and 
 | Comment thread or comment created/resolved/reopened/deleted | `page` channel: `comments.changed` (page id) |
 
 Channel names and payloads are specified in WEBSOCKET_PROTOCOL.md. Events are at-most-once; the collab server's periodic revalidation and client refetch on reconnect cover missed events (D22).
+
+## 15. Phase 3 implementation notes (2026-11-14)
+
+Confirmed behaviour of the implemented endpoints, and where it adds to or differs from the design above. Source: `apps/api/src/routes/{workspaces,invitations,pages,page-permissions,activity}.ts`.
+
+- **Registration:** all Phase 3 routes except `INV-05` are inside the authenticated scope; `INV-05` is public and rate limited. New `invitation` rate-limit rule (20 per 15 minutes per client address, D51) applies to `INV-05`, `INV-06` and `INV-07`; ownership transfer (`WS-09`) also uses the per-user `password` limiter. All remain fail-closed (D45).
+- **Status codes:** non-members and effective role `NONE` get `404 NOT_FOUND` with the same body as a missing resource; members below the required role get `403 FORBIDDEN`. A plain member deleting someone else's membership gets `403` before the target is looked up.
+- **`INVITATION` statuses:** `PENDING | ACCEPTED | DECLINED | REVOKED | EXPIRED`. `EXPIRED` is derived, never stored; `INV-02 ?status=PENDING` returns only unexpired pending invitations and `?status=EXPIRED` only expired ones. `inviteUrl` is `<APP_URL>/invite#token=<token>` and is returned only by `INV-01` and `INV-04`. Revoking or resending an `ADMIN`-role invitation needs the owner.
+- **`INV-01`:** `409 ALREADY_MEMBER` when the address belongs to a current member; `409 INVITATION_EXISTS` when an unexpired pending invitation exists; an expired pending one is retired as `REVOKED` and replaced.
+- **`WS-05`:** the owner only; the body must carry `confirmName` equal to the workspace name (trimmed), otherwise `400 VALIDATION_ERROR` with `details[0].path = "confirmName"`. Publishes `workspace.deleted` after commit.
+- **`WS-06`:** `email` is present only when the caller is `WS≥ADMIN`. Order: role (owner first), then display name.
+- **`WS-07`/`WS-08`/`WS-09`:** as designed; role changes by an unchanged role are no-ops (no log, no event). Access events `member.role_changed` / `member.removed` are published after commit (both users for a transfer).
+- **`PAGE-01`:** `afterPageId`: omitted = last, `null` = first, an id = directly after that sibling (`409 INVALID_MOVE` if it is not a sibling). A parent in another workspace is `409 INVALID_MOVE` (or `404` if the caller cannot see it).
+- **`PAGE-02`:** flat list ordered by `(parentId nulls first, position, id)` using code-unit order (D50); each page carries `myRole`.
+- **`PAGE-03`:** returns `breadcrumbs` (root first) containing only ancestors the caller can open.
+- **`PAGE-05`:** destination needs `PAGE≥EDITOR` on the new parent (or `WS≥EDITOR` for the root). The response `myRole` is `NONE` when the move put the page out of the caller's reach. Publishes `page.access_changed`.
+- **`PAGE-06`/`PAGE-07`:** delete marks the live subtree with one `deleteBatchId`; restore revives the target and its descendants of the same batch, under the original parent when it is alive and the depth limit allows, otherwise as a root; always placed last among siblings (D50).
+- **`PAGE-08`:** `WS≥EDITOR`; lists batch roots the caller could restore; cursor keyset `(deletedAt desc, id desc)`.
+- **`PAGE-09`:** `WS≥ADMIN`; `409 CONFLICT` unless the page is deleted.
+- **`PP-02`:** target must be a member (`404` otherwise); admins and the owner give `409 CANNOT_RESTRICT_ADMIN`. **`PP-03`:** `404` when no override exists.
+- **`ACT-01`/`ACT-02`:** keyset pagination `(createdAt desc, id desc)`; invalid cursor is `400 VALIDATION_ERROR`. Metadata holds ids only (no emails, tokens or titles).
+- **Not implemented:** `PAGE-10`; email delivery of invitations (D52); page search (no requirement).

@@ -47,21 +47,13 @@ const allowed: [string, string, string][] = [
   ['db may import shared', 'packages/db/src/x.ts', "import '@conote/shared';\n"],
 ];
 
-describe('module boundaries', () => {
-  it.each(violations)(
-    '%s',
-    async (_name, file, code) => {
-      const messages = await lint(file, code);
-      expect(messages.length).toBeGreaterThan(0);
-    },
-    20_000,
-  );
+describe('module boundaries', { timeout: 30_000 }, () => {
+  it.each(violations)('%s', async (_name, file, code) => {
+    const messages = await lint(file, code);
+    expect(messages.length).toBeGreaterThan(0);
+  });
 
-  it.each(allowed)(
-    '%s',
-    async (_name, file, code) => {
-      expect(await lint(file, code)).toEqual([]);
-    },
-    20_000,
-  );
+  it.each(allowed)('%s', async (_name, file, code) => {
+    expect(await lint(file, code)).toEqual([]);
+  });
 });

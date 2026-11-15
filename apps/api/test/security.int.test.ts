@@ -32,6 +32,7 @@ describe('rate limiting', () => {
       config: {
         rateLimits: {
           general: RELAXED,
+          invitation: RELAXED,
           register: RELAXED,
           password: RELAXED,
           loginAccount: RELAXED,
@@ -64,6 +65,7 @@ describe('rate limiting', () => {
       config: {
         rateLimits: {
           general: RELAXED,
+          invitation: RELAXED,
           register: RELAXED,
           password: RELAXED,
           login: RELAXED,
@@ -94,6 +96,7 @@ describe('rate limiting', () => {
       config: {
         rateLimits: {
           general: RELAXED,
+          invitation: RELAXED,
           login: RELAXED,
           password: RELAXED,
           loginAccount: RELAXED,
@@ -113,6 +116,7 @@ describe('rate limiting', () => {
       config: {
         rateLimits: {
           general: RELAXED,
+          invitation: RELAXED,
           login: RELAXED,
           register: RELAXED,
           loginAccount: RELAXED,
@@ -142,6 +146,7 @@ describe('rate limiting', () => {
     const h = await harness({
       config: {
         rateLimits: {
+          invitation: RELAXED,
           login: RELAXED,
           register: RELAXED,
           password: RELAXED,

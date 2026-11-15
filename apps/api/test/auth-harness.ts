@@ -177,6 +177,11 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 
 /** Remove every user created by tests (sessions cascade). */
 export async function deleteTestUsers(deps: Dependencies): Promise<void> {
+  // Workspaces first: deleting an owner while their workspace survives would leave it without
+  // an owner, which the deferred database trigger rejects at commit (DATABASE_SCHEMA §5).
+  await deps.prisma.workspace.deleteMany({
+    where: { members: { some: { user: { email: { endsWith: EMAIL_DOMAIN } } } } },
+  });
   await deps.prisma.user.deleteMany({ where: { email: { endsWith: EMAIL_DOMAIN } } });
 }
 

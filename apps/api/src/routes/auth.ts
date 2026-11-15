@@ -24,7 +24,13 @@ import { authOf, clearSessionCookie, createRequireAuth, setSessionCookie } from 
 import { hashPassword, verifyAgainstDummyHash, verifyPassword } from '../auth/passwords.js';
 import { SessionService, USER_SELECT, type ClientMeta } from '../auth/sessions.js';
 import { rateLimitConfig } from '../plugins/security.js';
+import { AccessService } from '../workspaces/access.js';
+import { registerActivityRoutes } from './activity.js';
+import { registerInvitationPublicRoutes, registerInvitationRoutes } from './invitations.js';
+import { registerPagePermissionRoutes } from './page-permissions.js';
+import { registerPageRoutes } from './pages.js';
 import { registerUserRoutes } from './users.js';
+import { registerWorkspaceRoutes } from './workspaces.js';
 
 function clientMeta(request: FastifyRequest): ClientMeta {
   return { userAgent: request.headers['user-agent'], ip: request.ip };
@@ -148,6 +154,9 @@ export async function registerAuthRoutes(
       return reply.send(successEnvelope({ user: toUserDto(found) }));
     },
   );
+
+  // INV-05: unauthenticated; the invitation token is the credential.
+  await registerInvitationPublicRoutes(root, dependencies, config);
 
   // Everything below requires a valid session.
   await root.register(async (protectedScope) => {
@@ -276,5 +285,13 @@ export async function registerAuthRoutes(
 
     // ───────────── USER-01 / USER-02 ─────────────
     await registerUserRoutes(guarded, dependencies, config);
+
+    // ───────────── Phase 3: workspaces, invitations, pages, permissions, activity ─────────────
+    const access = new AccessService(prisma);
+    await registerWorkspaceRoutes(guarded, dependencies, config, access);
+    await registerInvitationRoutes(guarded, dependencies, config, access);
+    await registerPageRoutes(guarded, dependencies, config, access);
+    await registerPagePermissionRoutes(guarded, dependencies, config, access);
+    await registerActivityRoutes(guarded, dependencies, config, access);
   });
 }

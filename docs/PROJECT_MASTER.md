@@ -1,7 +1,7 @@
 # CoNote – Project Master
 
-**Status:** Phase 1a infrastructure foundations implemented; Phase 1b collaboration spike not yet run. No product feature (authentication, workspaces, editor, collaboration, comments or version history) is implemented.
-**Last updated:** 2026-11-12
+**Status:** Phase 1 infrastructure and Phase 2 authentication are implemented and owner-verified locally; **Phase 3 (workspaces, pages, permissions) is implemented and owner-verified locally (2026-11-15; final acceptance pending, see HANDOVER.md §8.8)**. The editor, collaboration, comments and version history are not implemented. Current status is always in HANDOVER.md.
+**Last updated:** 2026-11-15
 
 This document is the complete project overview: goals, requirements, permissions, technology stack and roadmap summary. Technical decisions are in [DECISIONS.md](DECISIONS.md); decision IDs (`D#`) and unresolved IDs (`U#`) referenced here are defined there.
 

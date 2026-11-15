@@ -22,6 +22,11 @@ export interface AuthContextValue {
   changePassword(input: ChangePasswordRequest): Promise<void>;
   listSessions(): Promise<SessionInfoDto[]>;
   revokeSession(sessionId: string): Promise<void>;
+  /**
+   * Run any authenticated API call: an UNAUTHENTICATED answer (expired or revoked session)
+   * signs the UI out and returns to the login page, then the error is rethrown.
+   */
+  guard<T>(call: () => Promise<T>): Promise<T>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -63,7 +68,7 @@ export function AuthProvider({
 
   // Actions do not depend on `user`, so their identities stay stable across profile updates
   // (components can safely list them as effect dependencies).
-  const actions = useMemo<Omit<AuthContextValue, 'user'>>(
+  const actions = useMemo<Omit<AuthContextValue, 'user' | 'guard'>>(
     () => ({
       login: async (input) => {
         const result = await api.login(input);
@@ -95,8 +100,12 @@ export function AuthProvider({
     }),
     [guarded, toLogin],
   );
+  const guard = guarded;
 
-  const value = useMemo<AuthContextValue>(() => ({ user, ...actions }), [user, actions]);
+  const value = useMemo<AuthContextValue>(
+    () => ({ user, ...actions, guard }),
+    [user, actions, guard],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

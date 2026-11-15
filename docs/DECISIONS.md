@@ -1,7 +1,7 @@
 # CoNote – Technical Decisions
 
-**Status:** Phase 1 infrastructure implemented and Phase 1b spike executed; Phase 2 authentication and user management implemented and locally verified. D41–D47 explicitly accepted by the project owner on 2026-11-13. Phase 2 GitHub Actions CI was deliberately deferred by the owner and is not recorded as passed. Evidence and remaining limitations are tracked in HANDOVER.md.
-**Last updated:** 2026-11-13
+**Status:** Phase 1 infrastructure implemented and Phase 1b spike executed; Phase 2 authentication and user management implemented and locally verified. D41–D47 explicitly accepted by the project owner on 2026-11-13. Phase 2 GitHub Actions CI was deferred by the owner and later reported as passed by the owner (recorded 2026-11-15). Evidence and remaining limitations are tracked in HANDOVER.md.
+**Last updated:** 2026-11-14
 **Owner:** Project owner (approvals) / Claude (drafting)
 
 This is the permanent decision register for CoNote. Decision IDs (`D#`) and unresolved-question IDs (`U#`) are **permanent**: they are never renumbered or reused. A changed decision is recorded by adding a new decision that supersedes the old one and updating the old one's status.
@@ -67,6 +67,12 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 | D45 | Rate-limit scopes, initial values and fail-closed behaviour | Accepted (owner approval, 2026-11-13) |
 | D46 | Web authentication architecture (server guards, client state, tests) | Accepted (owner approval, 2026-11-13) |
 | D47 | Phase 2 dependencies and the release-age gate | Accepted (owner approval, 2026-11-13) |
+| D48 | Invitee can decline an invitation (`DECLINED` status, INV-07) | Accepted (owner approval, 2026-11-15) |
+| D49 | Per-workspace advisory lock serializes structural changes | Accepted (owner approval, 2026-11-15) |
+| D50 | Page ordering: code-unit comparison in the application, re-spacing at 48 characters | Accepted (owner approval, 2026-11-15) |
+| D51 | Invitation lifecycle details: derived `EXPIRED`, generic error, email match, rate limit | Accepted (owner approval, 2026-11-15) |
+| D52 | Phase 3 scope exclusions and deferrals | Accepted (owner approval, 2026-11-15) |
+| D53 | Phase 3 web architecture (workspace shell, client data loading) | Accepted (owner approval, 2026-11-15) |
 
 ---
 
@@ -391,6 +397,43 @@ Protected pages call `requireUser()` (server component, asks the API with the fo
 - **Status:** Accepted (owner approval, 2026-11-13; proposed dependency set)
 `apps/api`: `argon2` 0.45.2 (native; added to `allowBuilds`), `@fastify/cookie` 11.1.5, `@fastify/cors` 11.4.1, `@fastify/helmet` 13.2.0, `@fastify/rate-limit` 11.2.2, `fastify-type-provider-zod` 7.0.0, `zod` 4.6.7. `apps/web` dev-only: `jsdom` 30.1.3, `@testing-library/react` 16.3.3, `@testing-library/dom` 10.4.2, `@testing-library/user-event` 14.6.8. `user-event` 14.6.10 (published 2026-11-12) and a first `jsdom` 31.0.0 (2026-11-05, a new major) were not used: pnpm had added a `minimumReleaseAgeExclude` entry for 14.6.10, which was removed in favour of an older version, consistent with D39. No package is excluded from the gate. Engines were checked against Node 24.
 
+
+### D48 – Invitee can decline an invitation
+
+- **Status:** Accepted (owner approval, 2026-11-15)
+- **Context:** The Phase 3 task lists "accept and reject invitations". API_CONTRACTS had only INV-03 (an admin revokes) and INV-06 (accept); the invitee had no way to refuse.
+- **Decision:** Add `DECLINED` to `InvitationStatus` and `POST /api/v1/invitations/decline` (INV-07): authenticated, token in the body, same checks as accept (pending, unexpired, signed-in email equals invited email), one generic `INVITATION_INVALID` otherwise. `revokedAt` doubles as the "closed at" timestamp for declined invitations (no new column). Activity action `member.declined`. A declined address can be invited again.
+- **Consequences:** One enum value in the migration; the invitee-facing UI is the `/invite` page (token link), not an inbox. There is deliberately no "list invitations addressed to me" endpoint: invitations stay bearer-link based (D30).
+
+### D49 – Per-workspace advisory lock for structural changes
+
+- **Status:** Accepted (owner approval, 2026-11-15). Implements the PAGE-05 design note; extended to membership changes.
+- **Decision:** Page create/move/delete/restore/purge, member role changes, member removal, ownership transfer, invitation creation/acceptance and page-permission changes take `pg_advisory_xact_lock(hashtextextended(workspaceId, 0))` at the start of their transaction. Authorization reads that precede the transaction are repeated inside it where a concurrent change could invalidate them (membership, ownership).
+- **Consequences:** Structural operations of one workspace are serialized; reads and page-content writes are not affected. Contention is acceptable at the target scale (D12). The deferred owner trigger and the partial unique index remain the last line of defence for the one-owner invariant.
+
+### D50 – Page ordering: code-unit comparison and re-spacing
+
+- **Status:** Accepted (owner approval, 2026-11-15)
+- **Decision:** `Page.position` is a base-36 fractional key (`packages/shared/src/page-position.ts`, written in-repo, no new dependency). Siblings are ordered by plain code-unit string comparison in the API and web client, never by a database collation (`ORDER BY` under a locale collation would reorder keys). New keys longer than 48 characters trigger re-spacing of all siblings of that parent to short evenly spaced keys (column limit 64). A restored page is placed last among its siblings, because its old key may collide with siblings added since.
+- **Consequences:** Appending repeatedly lengthens keys by about one character per five appends; re-spacing happens roughly every few hundred appends under one parent. Property tests cover ordering, validity and re-spacing.
+
+### D51 – Invitation lifecycle details
+
+- **Status:** Accepted (owner approval, 2026-11-15)
+- **Decision:** `EXPIRED` is derived (`PENDING` and past `expiresAt`), never stored. Creating an invitation for an address whose only pending invitation has expired retires that row as `REVOKED` (it would otherwise block the one-pending-per-email index). Preview, accept and decline return one generic `INVITATION_INVALID` for unknown, used, expired, revoked and wrong-account tokens. Accept requires the signed-in email to equal the invited email. Preview and accept/decline share the stricter `invitation` rate-limit rule (20 per 15 minutes per client address). Resend rotates the token and extends the expiry. Invitation links are returned only by INV-01 and INV-04, never by listing.
+- **Consequences:** The email in the preview is masked (`j***@example.com`). No email is sent in Phase 3 (D52).
+
+### D52 – Phase 3 scope exclusions and deferrals
+
+- **Status:** Accepted (owner approval, 2026-11-15)
+- **Decision:** Not implemented in Phase 3, with reasons: (1) **Page search**: no search requirement exists in PROJECT_MASTER or IMPLEMENTATION_PLAN, so it is outside the approved scope the task refers to; (2) **Invitation email adapter**: U6 (email provider) is undecided and logging a link would put a bearer token in logs; invitations are link-based and shown once to the admin; (3) **Development seed data** and **Playwright E2E**: not required to meet the Phase 3 acceptance criteria; AC-3.11 is covered by API-level flow tests instead; (4) **PAGE-10** (collaboration token) belongs to Phase 6; (5) account deletion must transfer or delete owned workspaces first (the owner trigger rejects an ownerless workspace), to be handled when account deletion is designed; (6) lists are requested with limit 100 and have no paging controls in the UI.
+- **Consequences:** Each item is recorded in HANDOVER as a known limitation.
+
+### D53 – Phase 3 web architecture
+
+- **Status:** Accepted (owner approval, 2026-11-15)
+- **Decision:** Route pages are thin server components (the `(app)` layout guards with `requireUser()`); data is loaded by client components through the typed API client and `useAuth().guard`, which signs the UI out on `UNAUTHENTICATED`. A workspace layout (`WorkspaceShell`) loads the workspace and the flat page list once and shares them by context; the page tree is built client-side with the same sibling order as the server. The web client uses shared pure functions (`decideRoleChange`, `decideRemoval`, `canInviteWithRole`) only to enable or disable controls; the server remains the sole authority. The invitation token is read from the URL fragment in the browser and, if sign-in is needed first, kept in `sessionStorage` for the tab only.
+- **Consequences:** The stale Phase 1 `app/page.tsx` placeholder is removed (it shadowed the `(app)` home page, see HANDOVER §7.9 finding 1). Verification (2026-11-15) added two details: the page and workspace views remount per id (`key`) so local state resets without effects, and `useLoad` derives `loading` from the settled request rather than setting it in an effect, to satisfy `react-hooks/set-state-in-effect`; neither changes the architecture above.
 
 ## Unresolved decisions
 

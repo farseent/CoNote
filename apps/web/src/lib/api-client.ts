@@ -1,12 +1,23 @@
 import type {
+  AssignableRole,
   ChangePasswordRequest,
+  CreateInvitationRequest,
+  CreatePageRequest,
   ErrorCode,
   ErrorDetail,
+  InvitationDto,
   LoginRequest,
+  MemberDto,
+  MovePageRequest,
+  PageAccessRole,
+  PageDto,
+  PagePermissionDto,
   RegisterRequest,
   SessionInfoDto,
   UpdateProfileRequest,
   UserDto,
+  UserSummaryDto,
+  WorkspaceDto,
 } from '@conote/shared';
 
 /** Error raised for every failed API call, whatever the cause. */
@@ -99,7 +110,107 @@ export const api = {
   listSessions: () => request<{ sessions: SessionInfoDto[] }>('GET', '/api/v1/auth/sessions'),
   revokeSession: (sessionId: string) =>
     request<null>('DELETE', `/api/v1/auth/sessions/${encodeURIComponent(sessionId)}`),
+
+  // ───────────── Workspaces and members ─────────────
+  listWorkspaces: () => request<{ workspaces: WorkspaceDto[] }>('GET', '/api/v1/workspaces'),
+  createWorkspace: (input: { name: string }) =>
+    request<{ workspace: WorkspaceDto }>('POST', '/api/v1/workspaces', input),
+  getWorkspace: (id: string) =>
+    request<{ workspace: WorkspaceDto }>('GET', `/api/v1/workspaces/${enc(id)}`),
+  renameWorkspace: (id: string, input: { name: string }) =>
+    request<{ workspace: WorkspaceDto }>('PATCH', `/api/v1/workspaces/${enc(id)}`, input),
+  deleteWorkspace: (id: string, input: { confirmName: string }) =>
+    request<null>('DELETE', `/api/v1/workspaces/${enc(id)}`, input),
+  listMembers: (id: string) =>
+    request<{ members: MemberDto[] }>('GET', `/api/v1/workspaces/${enc(id)}/members`),
+  changeMemberRole: (id: string, userId: string, role: AssignableRole) =>
+    request<{ member: MemberDto }>(
+      'PATCH',
+      `/api/v1/workspaces/${enc(id)}/members/${enc(userId)}`,
+      { role },
+    ),
+  removeMember: (id: string, userId: string) =>
+    request<null>('DELETE', `/api/v1/workspaces/${enc(id)}/members/${enc(userId)}`),
+  transferOwnership: (id: string, input: { userId: string; password: string }) =>
+    request<{ workspace: WorkspaceDto }>(
+      'POST',
+      `/api/v1/workspaces/${enc(id)}/transfer-ownership`,
+      input,
+    ),
+
+  // ───────────── Invitations ─────────────
+  // Lists are requested with the largest page (100); paging controls arrive with larger workspaces.
+  listInvitations: (id: string) =>
+    request<{ invitations: InvitationDto[] }>(
+      'GET',
+      `/api/v1/workspaces/${enc(id)}/invitations?limit=100`,
+    ),
+  createInvitation: (id: string, input: CreateInvitationRequest) =>
+    request<{ invitation: InvitationDto; inviteUrl: string }>(
+      'POST',
+      `/api/v1/workspaces/${enc(id)}/invitations`,
+      input,
+    ),
+  revokeInvitation: (id: string, invitationId: string) =>
+    request<null>('DELETE', `/api/v1/workspaces/${enc(id)}/invitations/${enc(invitationId)}`),
+  resendInvitation: (id: string, invitationId: string) =>
+    request<{ invitation: InvitationDto; inviteUrl: string }>(
+      'POST',
+      `/api/v1/workspaces/${enc(id)}/invitations/${enc(invitationId)}/resend`,
+    ),
+  previewInvitation: (token: string) =>
+    request<{
+      workspaceName: string;
+      role: AssignableRole;
+      invitedBy: string | null;
+      emailHint: string;
+    }>('POST', '/api/v1/invitations/preview', { token }),
+  acceptInvitation: (token: string) =>
+    request<{ workspace: WorkspaceDto }>('POST', '/api/v1/invitations/accept', { token }),
+  declineInvitation: (token: string) =>
+    request<null>('POST', '/api/v1/invitations/decline', { token }),
+
+  // ───────────── Pages ─────────────
+  listPages: (workspaceId: string) =>
+    request<{ pages: PageDto[] }>('GET', `/api/v1/workspaces/${enc(workspaceId)}/pages`),
+  createPage: (workspaceId: string, input: CreatePageRequest) =>
+    request<{ page: PageDto }>('POST', `/api/v1/workspaces/${enc(workspaceId)}/pages`, input),
+  getPage: (pageId: string) =>
+    request<{ page: PageDto; breadcrumbs: { id: string; title: string }[] }>(
+      'GET',
+      `/api/v1/pages/${enc(pageId)}`,
+    ),
+  updatePage: (pageId: string, input: { title?: string; icon?: string | null }) =>
+    request<{ page: PageDto }>('PATCH', `/api/v1/pages/${enc(pageId)}`, input),
+  movePage: (pageId: string, input: MovePageRequest) =>
+    request<{ page: PageDto }>('POST', `/api/v1/pages/${enc(pageId)}/move`, input),
+  deletePage: (pageId: string) =>
+    request<{ deleteBatchId: string }>('DELETE', `/api/v1/pages/${enc(pageId)}`),
+  restorePage: (pageId: string) =>
+    request<{ page: PageDto }>('POST', `/api/v1/pages/${enc(pageId)}/restore`),
+  purgePage: (pageId: string) => request<null>('POST', `/api/v1/pages/${enc(pageId)}/purge`),
+  listTrash: (workspaceId: string) =>
+    request<{ pages: PageDto[] }>('GET', `/api/v1/workspaces/${enc(workspaceId)}/trash?limit=100`),
+
+  // ───────────── Page permissions ─────────────
+  listPagePermissions: (pageId: string) =>
+    request<{
+      overrides: PagePermissionDto[];
+      inherited: { user: UserSummaryDto; role: PageAccessRole; fromPageId: string }[];
+    }>('GET', `/api/v1/pages/${enc(pageId)}/permissions`),
+  setPagePermission: (pageId: string, userId: string, role: PageAccessRole) =>
+    request<{ permission: PagePermissionDto }>(
+      'PUT',
+      `/api/v1/pages/${enc(pageId)}/permissions/${enc(userId)}`,
+      { role },
+    ),
+  removePagePermission: (pageId: string, userId: string) =>
+    request<null>('DELETE', `/api/v1/pages/${enc(pageId)}/permissions/${enc(userId)}`),
 };
+
+function enc(value: string): string {
+  return encodeURIComponent(value);
+}
 
 /** Human-readable text for an API failure, safe to show to the user. */
 export function describeApiError(error: unknown): string {
@@ -124,6 +235,24 @@ export function describeApiError(error: unknown): string {
       return 'The request was rejected. Reload the page and try again.';
     case 'VALIDATION_ERROR':
       return 'Please check the highlighted fields.';
+    case 'FORBIDDEN':
+      return 'You do not have permission to do this.';
+    case 'NOT_FOUND':
+      return 'This item no longer exists, or you no longer have access to it.';
+    case 'ALREADY_MEMBER':
+      return 'This person is already a member of the workspace.';
+    case 'INVITATION_EXISTS':
+      return 'A pending invitation for this email already exists. Resend or revoke it instead.';
+    case 'INVITATION_INVALID':
+      return 'This invitation is not valid. It may have expired, been used, or been sent to a different account.';
+    case 'INVALID_MOVE':
+      return 'That page cannot be placed there (it would exceed the nesting limit or loop).';
+    case 'CANNOT_RESTRICT_ADMIN':
+      return 'Admins and the owner always have full access and cannot be restricted.';
+    case 'OWNER_PROTECTED':
+      return 'The workspace owner cannot be removed or demoted. Transfer ownership first.';
+    case 'CONFLICT':
+      return 'This changed while you were working. Reload and try again.';
     default:
       return 'Something went wrong. Please try again.';
   }

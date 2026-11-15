@@ -1,7 +1,7 @@
 # CoNote – WebSocket Protocol
 
-**Status:** Protocol design only. The Phase 1 collab process shell and health endpoints exist, but every document connection is deliberately rejected; no CoNote collaboration protocol feature is implemented. The disposable Phase 1b harness is prepared under `spikes/collab-poc/`, but S1–S11 have not yet been executed; all runtime-dependent statements below remain subject to the verification register.
-**Last updated:** 2026-11-12
+**Status:** Protocol design only. (Phase 3 note: the REST API now publishes the §10 access events `member.role_changed`, `member.removed`, `workspace.deleted` and `page.access_changed` to Redis after commit; nothing consumes them until Phase 6.) The Phase 1 collab process shell and health endpoints exist, but every document connection is deliberately rejected; no CoNote collaboration protocol feature is implemented. The disposable Phase 1b harness is prepared under `spikes/collab-poc/`, but S1–S11 have not yet been executed; all runtime-dependent statements below remain subject to the verification register.
+**Last updated:** 2026-11-14
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); guarantees `G1`–`G7` and verification items `V#` are in [ARCHITECTURE.md](ARCHITECTURE.md) (§8, §18). REST contracts are in [API_CONTRACTS.md](API_CONTRACTS.md).
 

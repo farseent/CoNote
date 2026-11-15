@@ -24,7 +24,7 @@ export function AppHeader() {
 
   return (
     <header className="border-b border-slate-200">
-      <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-3">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
         <Link href="/" className="text-lg font-semibold tracking-tight">
           CoNote
         </Link>

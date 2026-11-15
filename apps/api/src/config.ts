@@ -20,8 +20,10 @@ export interface RateLimits {
   login: RateLimitRule;
   /** Per normalized email: AUTH-02 (brute force on one account from many addresses). */
   loginAccount: RateLimitRule;
-  /** Per client IP and per user: AUTH-07. */
+  /** Per client IP and per user: AUTH-07 and ownership transfer (WS-09). */
   password: RateLimitRule;
+  /** Per client IP: invitation preview and accept, which take a bearer token (INV-05, INV-06). */
+  invitation: RateLimitRule;
 }
 
 const MINUTE = 60_000;
@@ -33,10 +35,13 @@ export const DEFAULT_RATE_LIMITS: RateLimits = {
   login: { max: 20, timeWindowMs: 15 * MINUTE },
   loginAccount: { max: 10, timeWindowMs: 15 * MINUTE },
   password: { max: 5, timeWindowMs: 15 * MINUTE },
+  invitation: { max: 20, timeWindowMs: 15 * MINUTE },
 };
 
 export interface ApiConfig {
   nodeEnv: 'development' | 'test' | 'production';
+  /** Browser-facing origin of the web app, used to build invitation links (D30). */
+  appUrl: string;
   allowedOrigins: string[];
   /** Trusted reverse-proxy addresses; empty = trust none. */
   trustProxy: string[];
@@ -53,6 +58,7 @@ export function createApiConfig(
   env: Pick<
     ApiEnv,
     | 'NODE_ENV'
+    | 'APP_URL'
     | 'ALLOWED_ORIGINS'
     | 'TRUST_PROXY'
     | 'SESSION_IDLE_TTL_DAYS'
@@ -61,6 +67,7 @@ export function createApiConfig(
 ): ApiConfig {
   return {
     nodeEnv: env.NODE_ENV,
+    appUrl: env.APP_URL,
     allowedOrigins: env.ALLOWED_ORIGINS,
     trustProxy: env.TRUST_PROXY,
     sessionIdleTtlMs: env.SESSION_IDLE_TTL_DAYS * DAY_MS,

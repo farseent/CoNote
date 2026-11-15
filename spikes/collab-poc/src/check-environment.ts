@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import { Redis } from "ioredis";
+import Redis from "ioredis";
 
 const databaseUrl = process.env.DATABASE_URL ??
   "postgres://conote:conote_dev_password@127.0.0.1:5433/conote_collab_poc";
