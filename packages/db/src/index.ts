@@ -1,12 +1,23 @@
 export { createPrismaClient } from './client.js';
 export type { PrismaClient } from './client.js';
 export { isDatabaseUnavailableError, isUniqueConstraintError } from './errors.js';
+export {
+  DocumentPageNotFoundError,
+  DocumentStore,
+  type AppendResult,
+  type CompactOptions,
+  type CompactResult,
+  type LoadResult,
+  type SeedResult,
+} from './document-store.js';
 export { checkDatabase } from './health.js';
 export { listExpectedMigrations } from './migrations.js';
 export type { DatabaseCheckOptions } from './health.js';
 export type {
   ActivityLog,
   Asset,
+  DocumentState,
+  DocumentUpdate,
   Invitation,
   Page,
   PageContent,

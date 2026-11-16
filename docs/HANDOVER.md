@@ -1,12 +1,14 @@
 # CoNote – Handover
 
-**Last updated:** 2026-11-16
+**Last updated:** 2026-11-16 (Phase 5 implemented, executed in a preparation environment and verified on the owner's machine; D57 accepted; Phase 4 accepted by the owner on 2026-11-16 — the older "final acceptance pending" wording below is superseded)
+
+**Current phase: Phase 5 – Yjs CRDT Integration. Implemented, executed in a preparation environment (§10.8: 802 tests, defects fixed) and verified on the owner's machine on 2026-11-16 (§10.9): install, Prisma migrate deploy/status and drift check, lint, format check, typecheck, 802 tests on Node 24.18.0 and PostgreSQL 17, and a real SIGKILL restart check all passed. D57 accepted on 2026-11-16. Phase 5 is a library and database phase: the web editor still uses the interim autosave (D54) and there is no provider, server or browser collaboration until Phase 6. Not done: final Phase 5 acceptance, Docker, GitHub Actions.**
 
 **Current phase:** Phase 4 – Rich-Text Editor. **Implemented on 2026-11-15; owner-verified locally on 2026-11-16 (§9.11); D54–D56 accepted on 2026-11-16; final Phase 4 acceptance is pending.** The Phase 4 task was issued while final Phase 3 acceptance was still pending; as with Phases 2 and 3, that instruction was treated as approval to start. The task conflicted with the approved plan in two places (persistence/autosave and image storage); the owner answered "do what is best for now", the choices were recorded as proposed decisions D54–D56 and the owner approved them on 2026-11-16. The implementation was first built in a preparation environment (lint, typecheck, build and 692 tests passed against PostgreSQL 16 and Redis 7); the owner then ran Prisma `migrate deploy` and the scratch-database drift check, `pnpm check` (692 tests) and a full browser walkthrough locally (§9.11). **Not executed:** Docker (the `apps` profile needs a volume for `ASSET_STORAGE_DIR`), GitHub Actions, S3/MinIO, Playwright.
 
 **Phase 3 status carried forward:** implemented and owner-verified locally on 2026-11-15 (§8.8); D48–D53 accepted; **final Phase 3 acceptance, GitHub Actions CI and the Docker `apps` profile check are still open.** Phase 2: owner-verified locally, CI reported passing, final sign-off never recorded.
 
-**Next step:** the owner records final acceptance of Phase 3 and Phase 4 (and the open Phase 2 sign-off); decides the production storage backend (U7: S3-compatible adapter, MinIO, avatar upload) before deployment; optionally runs the Docker `apps` profile (with a volume for `ASSET_STORAGE_DIR`) and GitHub Actions; then Phase 5 – Yjs CRDT Integration. **Do not start Phase 5 until Phase 4 is accepted.**
+**Next step:** the owner records final acceptance of Phase 3 and Phase 4 (and the open Phase 2 sign-off); decides the production storage backend (U7: S3-compatible adapter, MinIO, avatar upload) before deployment; optionally runs the Docker `apps` profile (with a volume for `ASSET_STORAGE_DIR`) and GitHub Actions; then Phase 5 – Yjs CRDT Integration. **(Superseded: Phase 4 was accepted on 2026-11-16, Phase 5 was implemented and verified locally on 2026-11-16, and D57 was accepted. Next: the owner records final Phase 5 acceptance and runs GitHub Actions on the Phase 5 change (new dependencies and lockfile); then Phase 6 – Hocuspocus server and provider, which starts with the `collab → editor` boundary decision, D57 consequence (a).)**
 
 Read `CLAUDE.md` first. This file is the source of truth for current project status.
 
@@ -24,7 +26,7 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 
 | Collaboration server | Hocuspocus shell and operational endpoints implemented. It deliberately rejects every document connection; this is not a working collaboration service (D38) |
 
-| Database | Prisma 7.10.1; baseline migration, `20261112120000_auth_users_sessions` (`User`, `Session`) and, `20261114090000_workspaces_pages_permissions` (Phase 3 models, hand-written SQL incl. the deferred one-owner trigger). **Phase 4 adds `20261115120000_editor_content_assets` (`page_contents` — interim — and `assets`, hand-written SQL; §9); the owner's `migrate deploy`, `migrate status` and scratch-database drift check were clean on 2026-11-16 (§9.11).** That migration is hand-written SQL. The owner's local `migrate deploy`, `migrate status` and scratch-database `migrate:dev` drift check were clean on 2026-11-13 (§7.9). Document content is persisted only by the interim `page_contents` table (D54); the Yjs document store does not exist |
+| Database | Prisma 7.10.1; baseline migration, `20261112120000_auth_users_sessions` (`User`, `Session`) and, `20261114090000_workspaces_pages_permissions` (Phase 3 models, hand-written SQL incl. the deferred one-owner trigger). **Phase 4 adds `20261115120000_editor_content_assets` (`page_contents` — interim — and `assets`, hand-written SQL; §9); the owner's `migrate deploy`, `migrate status` and scratch-database drift check were clean on 2026-11-16 (§9.11).** That migration is hand-written SQL. The owner's local `migrate deploy`, `migrate status` and scratch-database `migrate:dev` drift check were clean on 2026-11-13 (§7.9). **Phase 5 adds `20261116120000_yjs_document_store` (`document_states`, `document_updates`; hand-written SQL; §10); the owner's `migrate deploy`, `migrate status` and scratch-database drift check were clean on 2026-11-16 (§10.9).** The web app still persists content only through the interim `page_contents` table (D54); the Yjs `DocumentStore` exists and is tested but nothing in the apps calls it until Phase 6 |
 
 | Local infrastructure | PostgreSQL 17 and Redis 7 Compose services reported healthy. PostgreSQL host port 5433 maps to container port 5432; Redis host port 6379 |
 
@@ -812,3 +814,144 @@ Run locally by the owner (Windows, Git Bash, Node 24.18.0, pnpm 12.18.0, Postgre
 - U7: production storage backend (S3-compatible adapter, MinIO and its licensing check, avatar upload / `USER-02 avatarAssetId`).
 - Docker `apps` profile (needs a volume for `ASSET_STORAGE_DIR`) and GitHub Actions for Phases 3 and 4.
 - Known limitations in §9.7 stand unchanged.
+
+## 10. Phase 5 – implementation record (2026-11-16)
+
+**§10.1–10.7 record how Phase 5 was first written, without network access, so nothing was run then. It was run afterwards, on 2026-11-16, in a preparation environment: the results and the fixes it needed are in §10.8, and where §10.3 and §10.4 disagree with §10.8, §10.8 is current.**
+
+### 10.1 Decisions taken for the owner ("do what is best for me")
+
+Phase 4 accepted. Choices recorded as **D57 (proposed 2026-11-16, accepted by the owner 2026-11-16)**: binding package and pins (V9), shared Yjs helpers, `DocumentStore`, the extra `persistedDigest` column, load order, server-only seeding. Snapshots stay in Phase 8 (compaction is this phase's "snapshot and recovery foundation"). The web editor was **not** switched to Yjs: it has no provider or server until Phase 6, and switching now would break the working autosave (D54). The binding is an opt-in entry point, `@conote/editor/collaboration`.
+
+### 10.2 What was written
+
+| Area | Files |
+|---|---|
+| `packages/shared` | `src/collab.ts`, `src/yjs.ts` (+ tests), `yjs` 13.6.33 dependency, `sideEffects: false` |
+| `packages/db` | models `DocumentState`, `DocumentUpdate` in `schema.prisma`; migration `20261116120000_yjs_document_store`; `src/document-store.ts` (`appendDiff`, `load`, `compact`, `seedIfEmpty`); `yjs` dependency; tests `document-store.int.test.ts`, `document-load-baseline.int.test.ts`, `document-test-support.ts` |
+| `packages/editor` | `src/collaboration.ts` (`createCollaborativeRegistry`, `contentToYDoc`, `ydocToContent`), `src/collaboration.test.ts`, dependencies `@tiptap/extension-collaboration` 3.33.1, `@tiptap/y-tiptap` 3.0.7, `y-protocols` 1.0.7, `yjs` 13.6.33, `./collaboration` export |
+| Docs | DECISIONS (D57), ARCHITECTURE §22, §18 V9, DATABASE_SCHEMA §3/§7/§14, WEBSOCKET_PROTOCOL §5a, IMPLEMENTATION_PLAN, TESTING §8.0d, this file |
+
+### 10.3 Acceptance criteria (IMPLEMENTATION_PLAN, Phase 5) — results in §10.8
+
+| AC | Test written | Status |
+|---|---|---|
+| 5.1 two editors converge | `collaboration.test.ts`, `yjs.test.ts` | Passed (§10.8) |
+| 5.2 randomized convergence prints the seed | `yjs.test.ts` (25 seeds), `collaboration.test.ts` (5 seeds); the seed is in the test name and message | Passed (§10.8) |
+| 5.3 diff-only, no-op store | `document-store.int.test.ts` | Passed (§10.8) |
+| 5.4 concurrent stores serialize | same, 8 parallel stores and stores with compactions | Passed (§10.8) |
+| 5.5 per-client maximum merge | same | Passed (§10.8) |
+| 5.6 recovery equals the live document | same, 12 seeded histories + restart test | Passed (§10.8) |
+| 5.7 atomic compaction | same, injected failure via `beforeCommit` | Passed (§10.8) |
+| 5.8 commit boundary | same | Passed (§10.8) |
+| 5.9 PERF-06 baseline | `document-load-baseline.int.test.ts` | Recorded in TESTING §8.0d (preparation environment only) |
+| 5.10 V9 resolved | D57 / ARCHITECTURE §18 | Verified in the preparation environment and on the owner's machine (§10.9): installs without peer warnings, one `yjs`, all tests pass; newest `y-tiptap` is 3.3.0 and untested |
+
+Task items: 1–8 and 10–12 are implemented as library code (`Y.Doc`, binding, `Y.XmlFragment`, state-vector sync, update application, local/remote handling, out-of-order/duplicate safety); 13–14 as the store and migration; 15 as compaction/recovery only (no snapshot table, Phase 8); 16 as a restart test using a new Prisma client and store, **not** a real process restart (do that manually, §10.4 item 6).
+
+### 10.4 Owner verification checklist
+
+**Completed on 2026-11-16: items 1–4, 6 and 7 are done (results in §10.9). Item 5 (recording the PERF-06 baseline) is done in TESTING §8.0d; the CPU model and RAM of the owner's machine were not recorded.**
+
+1. `pnpm install` (not `--frozen-lockfile`: the lockfile lacks the new dependencies). Read the peer-dependency warnings for `@tiptap/y-tiptap`, `y-protocols`, `prosemirror-*`; if 3.0.7 is wrong, change the pin and record it in D57. Make sure only one `yjs` is installed (`pnpm why yjs`); two copies cause silent bugs.
+2. `pnpm db:generate`, `pnpm db:migrate:deploy`, `pnpm db:migrate:status`, then the scratch-database `migrate:dev` drift check; it must propose nothing new (the migration SQL is hand-written to match Prisma's output).
+3. `pnpm lint`, `pnpm format:check` (run `pnpm format` first if needed), `pnpm typecheck`; send me the output. Likely trouble spots: `Uint8Array<ArrayBuffer>` typing for Prisma `Bytes`, `doc.store.pendingStructs` typing in `DocumentReplica.hasPendingUpdates`, `@tiptap/y-tiptap` function typings, the `{ Collaboration }` named import.
+4. `pnpm test --testTimeout=20000`; send failures with output. Things I could not know and would check first: whether a document reloaded from storage re-stores nothing ("a document reloaded from storage is not stored again" depends on the digest being identical after a reload); `Y.mergeUpdates` on disordered/duplicated rows; jsdom timing in the editor tests (`settle()` waits 20 ms for the binding's first render).
+5. Record the `PERF-06 baseline` line printed by `document-load-baseline.int.test.ts` in TESTING.md with your machine details.
+6. Manual restart check (optional, no UI needed): in a scratch script, store a document with `DocumentStore`, stop the process, start a new one and `load`.
+7. Decide D57.
+
+### 10.5 Known limitations and open items
+
+- Not executed (above). The web app still uses the interim autosave (D54); there is no provider, server, presence or snapshots.
+- `collab → editor` is not an allowed module boundary but Phase 6 needs `contentToYDoc` (D57 consequence a).
+- No compaction trigger and no store debounce yet (Phase 6); `COMPACTION_UPDATE_THRESHOLD` = 200 is the D15 starting value, not a measured one.
+- Concurrent deletion of a whole paragraph and an edit inside it keeps the deletion (inherent to Yjs; the edit is not "silently lost" by a bug, but it is not visible afterwards).
+- Arbitrary malformed bytes sent to Yjs are untested by design (Phase 6 must authenticate and limit input).
+- The lockfile was not updated.
+
+### 10.6 Suggested commit message
+
+```
+feat: Phase 5 Yjs CRDT integration (see HANDOVER section 10)
+
+- shared: Yjs helpers (DocumentReplica, per-client state-vector merge, document coverage),
+  document-name helpers and constants
+- editor: @conote/editor/collaboration (Tiptap Collaboration binding, JSON <-> Y.Doc)
+- db: DocumentState/DocumentUpdate models, migration 20261116120000_yjs_document_store,
+  DocumentStore (appendDiff, load, compact, seedIfEmpty) with row-locked transactions
+- tests: convergence, out-of-order/duplicate delivery, recovery, atomic compaction,
+  restart, PERF-06 baseline harness
+- docs: D57, ARCHITECTURE s22, DATABASE_SCHEMA s14, WEBSOCKET_PROTOCOL s5a, HANDOVER s10
+
+Verified in a preparation environment (802 tests, typecheck, lint) and on the owner's machine
+(Node 24.18.0, PostgreSQL 17: install, migrate deploy/status and drift check, lint, format check,
+typecheck, 802 tests, SIGKILL restart check; HANDOVER section 10.9). D57 accepted.
+Not verified: Docker apps profile, GitHub Actions, a single `pnpm check` run.
+```
+
+### 10.7 Change log (Phase 5)
+
+| Date | Change |
+|---|---|
+| 2026-11-16 | Phase 4 accepted by the owner. Phase 5 implemented without execution; D57 proposed; owner verification pending (§10.4). |
+| 2026-11-16 | Phase 5 verified on the owner's machine (§10.9); D57 accepted by the owner. |
+
+### 10.8 Execution results and fixes (2026-11-16)
+
+**Environment:** Node v22.23.4 (the repo requires 24; `engine-strict` was overridden), PostgreSQL 16.13 and Redis 7 from apt on Linux x64 (Compose uses PostgreSQL 17), migrations applied by `psql` because the Prisma schema engine could not be downloaded. Not equivalent to the owner's machine; treat every number as a first observation.
+
+**Commands and results**
+
+| Command | Result |
+|---|---|
+| `pnpm install --config.engine-strict=false` | Succeeded; one `yjs` (13.6.33), no peer warnings |
+| `pnpm typecheck` | Clean after fix 1 below |
+| `pnpm lint` | Clean |
+| `prettier --check` | Phase 5 files clean after `--write`. Still reported (not Phase 5, untouched): `packages/shared/src/workspaces.ts`, `workspaces.test.ts`, `packages/db/test/workspace-constraints.int.test.ts`, and 19 files under `apps/` from Phase 3; `infra/docker-compose.yml` fails to parse (`name:` at line 8). Check on the owner's machine |
+| `vitest run` (unit and integration, `--testTimeout=20000`) | 43 files, 802 tests, all passed |
+| Yjs unit suites (`yjs.test.ts`, `collaboration.test.ts`) repeated 10 times | 70 of 70 each time, no flakiness |
+| `document-store.int.test.ts` | 35 passed (restart recovery, concurrent stores, compaction atomicity, per-client maximum) |
+| Real restart: a Node process stored two updates and was killed with SIGKILL; a new process called `load` | Recovered both paragraphs exactly (`appliedRows: 2`) |
+
+**Defects found and fixed**
+
+1. `yjs.test.ts`: `synchronizeReplicas` was called with test peers, not replicas (typecheck error). Added a test-side wrapper.
+2. `collaboration.ts` `ydocToContent`: the binding does not store `null` attributes, so the JSON lacked `textAlign: null`, `alt: null` and so on, and differed from `editor.getJSON()` and from the Phase 4 content in `page_contents`. It now reads the JSON through the ProseMirror schema, which restores the defaults. This was a library bug: 19 editor tests failed because of it.
+3. Randomized convergence tests (shared and editor): the harness only published a peer's updates after its own edits. Applying a remote update can make Yjs clean up redundant formatting, which is a local update of its own; unpublished, replicas deleted different format items and showed different bold/underline on one character (seeds 3 and 5, varying between runs because client ids are random). The harness now publishes every local update and delivers until quiet, as a provider would. **Consequence for Phase 6: the provider and `DocumentStore` must treat updates produced while applying remote updates like any other update. Do not filter by origin.**
+4. Tests: a Tiptap editor shows an empty trailing paragraph after a final image or table (TrailingNode). It is view-only (opening a document produced 0 Yjs updates and no duplicate paragraph with two clients), so the tests now expect it in the editor JSON and not in the stored content.
+
+**Not verified**
+
+- `prisma migrate deploy`, `migrate status` and the scratch-database `migrate:dev` drift check: the Prisma schema engine could not be downloaded, so the five migrations were applied with `psql` and `_prisma_migrations` was filled in by hand. Run §10.4 item 2 on your machine; the hand-written migration SQL is only proven to apply and to satisfy the tests.
+- Node 24 and PostgreSQL 17 (Node 22 and PostgreSQL 16 were used); `pnpm check` as a whole; the Docker and CI paths.
+- The newest `@tiptap/y-tiptap` (3.3.0).
+- Web editor: still not on Yjs (no provider until Phase 6), so no browser check of collaboration exists.
+
+| Date | Change |
+|---|---|
+| 2026-11-16 | Phase 5 executed in a preparation environment; fixes 1-4 above; documentation updated to match. |
+
+### 10.9 Owner verification on the owner's machine (2026-11-16)
+
+**Environment:** Windows (win32/x64), Node v24.18.0, pnpm 12.18.0, PostgreSQL 17 (`postgres:17-alpine`) and Redis 7 (`redis:7-alpine`) from Compose (PostgreSQL on host port 5433), Prisma 7.10.1. CPU and RAM were not recorded.
+
+| Command / check | Result |
+|---|---|
+| `pnpm install` | Lockfile already up to date; no peer warnings. `pnpm why yjs`: one version, 13.6.33 (shared by `@conote/*`, `@hocuspocus/server` 4.8.0, `@tiptap/extension-collaboration` 3.33.1, `@tiptap/y-tiptap` 3.0.7, `y-protocols` 1.0.7) |
+| `pnpm infra:up`, `docker ps` | PostgreSQL and Redis healthy |
+| `pnpm db:generate` | Prisma Client 7.10.1 generated |
+| `pnpm db:migrate:deploy`, `pnpm db:migrate:status` | 5 migrations found, no pending migrations, schema up to date (the Phase 5 migration had been applied beforehand) |
+| Scratch-database drift check | `conote_scratch` created empty; first `migrate:dev` applied all 5 migrations including `20261116120000_yjs_document_store` and proposed no new migration; second run "Already in sync"; no stray migration in `git status` |
+| `pnpm lint`, `pnpm format:check`, `pnpm typecheck` | Clean. The typing spots flagged in §10.4 item 3 (`Uint8Array<ArrayBuffer>` for Prisma `Bytes`, `pendingStructs`, `@tiptap/y-tiptap` typings, the `{ Collaboration }` import) compiled without changes |
+| `pnpm test --testTimeout=20000` | 43 files, 802 tests passed, 139.5 s |
+| PERF-06 baseline | 10 / 100 / 400 pending rows: `load` median 6.1 / 8.7 / 11.2 ms (recorded in TESTING §8.0d) |
+| Real process restart (scratch scripts, since removed) | A process stored two updates and was killed with SIGKILL; a new process recovered both paragraphs (`appliedRows: 2`, `foldedSeq: 0`); re-storing the loaded document wrote nothing (`stored: false`), which settles the "reloaded document is not stored again" question from §10.4 item 4 |
+
+**Outcome:** no defects found on the owner's machine; no code or pin changes were needed. **D57 accepted by the owner on 2026-11-16.**
+
+**Still not verified:** Docker `apps` profile, GitHub Actions (the Phase 5 dependencies and lockfile have never run on a clean CI runner), a single `pnpm check` run (the commands were run separately), the newest `@tiptap/y-tiptap` (3.3.0), and any browser behaviour (the web editor is not on Yjs yet).
+
+| Date | Change |
+|---|---|
+| 2026-11-16 | Phase 5 verified on the owner's machine; no fixes needed; D57 accepted; DECISIONS, TESTING §8.0d and this file updated. |

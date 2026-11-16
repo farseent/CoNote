@@ -182,6 +182,8 @@ model Page {
   activityLogs ActivityLog[]
   content      PageContent?
   assets       Asset[]
+  state        DocumentState?
+  updates      DocumentUpdate[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId, parentId, position])
@@ -267,4 +269,31 @@ model Asset {
   @@index([pageId])
   @@index([status, createdAt])
   @@map("assets")
+}
+
+// ───────────── Collaborative document persistence (D15, Phase 5) ─────────────
+
+model DocumentState {
+  pageId               String   @id @db.Uuid
+  foldedState          Bytes // compacted full Yjs state (updates up to foldedSeq merged in)
+  persistedStateVector Bytes // per-client maximum of everything stored: foldedState plus all DocumentUpdate rows
+  persistedDigest      Bytes // coverage (state vector + delete set) of the document at its last store; only decides whether a store is a no-op
+  foldedSeq            BigInt   @default(0) // highest DocumentUpdate.seq merged into foldedState
+  updatedAt            DateTime @updatedAt @db.Timestamptz(6)
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@map("document_states")
+}
+
+model DocumentUpdate {
+  seq       BigInt   @id @default(autoincrement())
+  pageId    String   @db.Uuid
+  update    Bytes // incremental Yjs update (diff), never the full document per edit
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId, seq])
+  @@map("document_updates")
 }

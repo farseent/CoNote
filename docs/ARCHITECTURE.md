@@ -467,7 +467,7 @@ Hocuspocus hook payloads use web-standard `Request`/`Headers` since v4; document
 | V6 | Provider accepts a token function for fresh tokens on reconnect | Phase 6 |
 | V7 | Next.js rewrite forwarding of `Origin`, `Host`, `X-Forwarded-*`, `Set-Cookie` | **Resolved in Phase 2** (Next.js 16.4.6, dev and `next start`): `Origin`, `Cookie`, `Content-Type`, body and `Set-Cookie` pass through; `X-Forwarded-Host` is added; **`X-Forwarded-For`/`-Proto` are not added and a client-supplied `X-Forwarded-For` passes unmodified** (§10.3) |
 | V8 | Prisma 7 + pnpm monorepo setup (generator output, driver adapter, config) | **Resolved in Phase 1a**: client generation, real adapter query, baseline migration deploy/status reported successful (U5; HANDOVER §3) |
-| V9 | Exactly which Yjs binding package the pinned Tiptap version needs (`@tiptap/y-tiptap`) | Phase 5 |
+| V9 | Exactly which Yjs binding package the pinned Tiptap version needs (`@tiptap/y-tiptap`) | **Phase 5 (D57; verified 2026-11-16 by install and test run, HANDOVER §10.8)**: `@tiptap/extension-collaboration` 3.33.1 + `@tiptap/y-tiptap` 3.0.7; one `yjs` 13.6.33 copy, no peer warnings. The newest `@tiptap/y-tiptap` is 3.3.0; it was not tested |
 | V10 | Applying a server-side transaction to a live document for restore | Phase 8 |
 | V11 | WebSocket message size limits and connection-limit mechanisms in Hocuspocus 4 | Phase 6 / 9 |
 | V12 | Client-to-server stateless messages: handler hook availability and payload semantics in 4.8 | Phase 1 spike / Phase 6 |
@@ -524,3 +524,14 @@ Not fetched during Phase 0 (confirm when implementing):
 - **Persistence (interim, D54):** `CONTENT-01/02` store validated ProseMirror JSON in `page_contents` with a revision compare-and-set; documents are validated on write and on read. A save that outlives its editor (navigation) is tracked so the next page load waits for it. This is replaced by the document store in Phase 5/6; the JSON seeds the `Y.Doc`.
 - **Images (D55):** the API talks to a `StorageAdapter` interface; the local-disk adapter validates object keys (`<uuid>/<uuid>`) and writes atomically. Uploaded bytes are checked against the announced size and the file's signature before an asset becomes `READY`; SVG is not accepted. `ASSET-04` (raw-body upload) is the single exception to the JSON-only rule of D25 and is scoped to one route and four image types. An hourly `asset-cleanup` job removes abandoned uploads and orphaned images.
 - **Collaboration readiness:** the extension set can drop built-in undo/redo (`undoRedo: false`); the document schema contains nothing that a `Y.Doc` cannot represent; Yjs, cursors and WebSocket collaboration are not implemented.
+
+## 22. Phase 5: Yjs binding and document store (2026-11-16)
+
+**Status:** implemented and executed in a preparation environment (HANDOVER §10.8); owner verification on the owner's machine is pending; decisions in D57.
+
+- **Client side:** `@conote/editor/collaboration` binds the Phase 4 editor to a `Y.Doc` (`createCollaborativeRegistry`), and converts between validated editor JSON and a `Y.Doc` (`contentToYDoc`, `ydocToContent`). `DocumentReplica` (`packages/shared`) separates local updates (reported to a provider) from remote ones (tagged `REMOTE_ORIGIN`, never echoed) and implements the two halves of the sync handshake: `stateVector()` (step 1) and `diffSince(vector)` (step 2). Duplicate and out-of-order updates are safe because Yjs applies updates idempotently and holds back an update whose dependencies have not arrived.
+- **Server side:** `DocumentStore` (`packages/db`) implements §8 exactly: lazy `DocumentState` row doubling as the lock; `appendDiff` writes `encodeStateAsUpdate(doc, persistedStateVector)` and sets the vector to the per-client maximum; `compact` merges rows into `foldedState` atomically; `load` rebuilds from state plus rows after `foldedSeq`.
+- **Deviations from §8.2/§8.4 found while implementing:** (1) the "if the diff is empty, stop" rule is not sufficient because deletions change the delete set but not the state vector, and every diff carries the whole delete set; `DocumentState.persistedDigest` was added (D57 item 4). (2) `load` reads update rows **before** the state (§8.4 did not say): see D57 item 5.
+- **Seeding:** pages that only have interim `page_contents` are seeded from it once, on the server, under the page lock (`seedIfEmpty`); clients never seed.
+- **Not built (Phases 6+):** WebSocket server and provider, authorization, store hooks and debounce, compaction trigger, snapshots, presence, web wiring.
+- **Guarantee evidence:** tests exist for G1 (convergence), G2 (commit boundary) and G4 (recovery, atomic compaction); none has been run, so none of G1/G2/G4 may be described as verified yet (CLAUDE.md §4.3).

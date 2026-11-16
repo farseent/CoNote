@@ -1,7 +1,8 @@
 # CoNote – WebSocket Protocol
 
 **Status:** Protocol design only. (Phase 3 note: the REST API now publishes the §10 access events `member.role_changed`, `member.removed`, `workspace.deleted` and `page.access_changed` to Redis after commit; nothing consumes them until Phase 6.) The Phase 1 collab process shell and health endpoints exist, but every document connection is deliberately rejected; no CoNote collaboration protocol feature is implemented. The disposable Phase 1b harness is prepared under `spikes/collab-poc/`, but S1–S11 have not yet been executed; all runtime-dependent statements below remain subject to the verification register.
-**Last updated:** 2026-11-14
+**Last updated:** 2026-11-16
+**Phase 5 note (2026-11-16):** no WebSocket feature exists yet. §5a records what Phase 5 implemented at the Yjs level (sync step 1/2 as library functions, local/remote update handling, seeding rule) so Phase 6 can wrap it in the wire protocol; it was executed in a preparation environment on 2026-11-16 (HANDOVER §10.8) but no wire protocol exists yet.
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); guarantees `G1`–`G7` and verification items `V#` are in [ARCHITECTURE.md](ARCHITECTURE.md) (§8, §18). REST contracts are in [API_CONTRACTS.md](API_CONTRACTS.md).
 
@@ -104,6 +105,27 @@ Redis Pub/Sub does not retain or replay messages missed by a disconnected instan
 2. Redis becoming available again does not, by itself, repair documents already loaded in memory on both instances.
 3. Phase 9 must implement a stale-document detection and recovery path. The baseline is to fence/mark affected documents, stop serving known-stale state, flush any state that can safely be committed, then force clients to reconnect to a document freshly hydrated from PostgreSQL. A surviving client can send its own uncommitted Yjs updates during the normal handshake. A server-to-server reconciliation alternative requires equivalent proof.
 4. Until that mechanism is implemented and tested, the system must report degraded collaboration and must not claim automatic reconvergence.
+
+## 5a. Yjs-level synchronization implemented in Phase 5 (library only)
+
+`DocumentReplica` (`packages/shared/src/yjs.ts`) provides the Yjs operations that the sync layer of §5 carries, without any transport:
+
+| Wire step (y-protocols) | Library function |
+|---|---|
+| Sync step 1 (client sends its state vector) | `replica.stateVector()` |
+| Sync step 2 (peer answers with what is missing) | `replica.diffSince(remoteStateVector)` |
+| Incremental update | reported by `onLocalUpdate(update)` for every local transaction |
+| Receiving step 2 or an incremental update | `replica.applyRemoteUpdate(update)` |
+
+Rules fixed by Phase 5 for Phase 6:
+
+1. **Origins.** Remote updates are applied with origin `REMOTE_ORIGIN`, hydration from storage with `STORE_ORIGIN`; neither is reported as a local update, so an update is never echoed back to its sender.
+2. **Duplicates and order.** Applying an update twice, or out of order, is safe; an update whose dependencies are missing stays pending (`hasPendingUpdates()`) and integrates when they arrive. The server must still authenticate and size-limit every message before it reaches Yjs: Yjs does not specify its behaviour on arbitrary bytes, and Phase 5 deliberately does not test it.
+3. **Initial content.** A page with no Yjs state is seeded **on the server only**, once, through `DocumentStore.seedIfEmpty(pageId, contentToYDoc(page_contents.content))`. Clients must never create initial content for an existing page, because each seeding creates new operations under a new client id and two seeds would duplicate the text.
+4. **Persisted vector.** The store records the per-client maximum of the persisted vector and the live document's vector; a late-joining instance may therefore store a diff that overlaps nothing but its own new operations.
+5. **Stored form.** Updates are stored as v1 Yjs updates (`encodeStateAsUpdate`); the server must not mix in v2 encodings without a migration.
+
+**Updates produced while applying remote updates (found in Phase 5 testing).** Applying a remote update to formatted text can make Yjs clean up redundant formatting, which emits a local `update` event. Phase 6 must broadcast and store these exactly like user edits; filtering updates by origin, or only forwarding updates made by the user's own edits, makes replicas delete different format items and show different formatting (HANDOVER §10.8, fix 3).
 
 ## 6. Awareness and presence
 

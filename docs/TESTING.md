@@ -1,6 +1,6 @@
 # CoNote – Testing Strategy
 
-**Status:** Phase 1a test foundation (reported passing by the owner: 9 files, 59 tests) plus **Phase 2 authentication tests, run by Claude in a preparation environment: 17 files, 228 tests passed (115 unit + 113 integration), twice in a row** (§8.0a). The Phase 1b spike harness is under `spikes/collab-poc/`. **Phase 3 tests were run by the owner on 2026-11-15 against PostgreSQL and Redis: `pnpm check` passed with 482 tests** (§8.0b). Tests for editing and collaboration do not exist yet. **Browser E2E (Playwright) is not implemented.**
+**Status:** Phase 1a test foundation (reported passing by the owner: 9 files, 59 tests) plus **Phase 2 authentication tests, run by Claude in a preparation environment: 17 files, 228 tests passed (115 unit + 113 integration), twice in a row** (§8.0a). The Phase 1b spike harness is under `spikes/collab-poc/`. **Phase 3 tests were run by the owner on 2026-11-15 against PostgreSQL and Redis: `pnpm check` passed with 482 tests** (§8.0b). **Phase 5 (Yjs integration) tests were run by the owner on 2026-11-16: 43 files, 802 tests passed on Node 24.18.0 and PostgreSQL 17** (§8.0d). There is no network collaboration yet (Phase 6), so no collaboration test runs through a server or a browser. **Browser E2E (Playwright) is not implemented.**
 **Last updated:** 2026-11-16
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); requirements and metrics (`FR-*`, `NFR-*`, `PERF-*`) in [PROJECT_MASTER.md](PROJECT_MASTER.md); guarantees `G1`–`G7` in [ARCHITECTURE.md](ARCHITECTURE.md) §8; phases and acceptance criteria (`AC-*`) in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
@@ -369,3 +369,42 @@ GitHub Actions is the confirmed CI provider; the Phase 1a workflow is configured
 | `pnpm test` | Both projects | Yes |
 
 Integration tests **fail** (they do not skip) if `DATABASE_URL`/`REDIS_URL` are missing. The GitHub Actions verification job runs on `ubuntu-latest`, so the real-process tests exercise the production SIGTERM handlers and require exit code 0 in CI. Windows local runs still verify that both child processes start, serve their health/readiness endpoints, and terminate; they do not claim to verify graceful SIGTERM handling. Playwright (E2E) is not configured yet; it arrives with the first end-to-end flow (Phase 2).
+
+### 8.0d Phase 5 tests (written 2026-11-16, executed in a preparation environment and on the owner's machine 2026-11-16)
+
+Executed in a preparation environment (Node v22.23.4 (the repo requires 24; `engine-strict` was overridden), PostgreSQL 16.13 and Redis 7 from apt on Linux x64 (Compose uses PostgreSQL 17), migrations applied by `psql` because the Prisma schema engine could not be downloaded): all Phase 5 tests pass (HANDOVER §10.8). The first run found three defects in the tests and in `ydocToContent`, fixed the same day. The PERF-06 numbers below are from that environment, not a target.
+
+**PERF-06 baseline (first measured value, three runs of the harness):** with 10 / 100 / 400 unfolded update rows (218 / 1,838 / 7,799 bytes), `DocumentStore.load` median was 2.7 / 15.9 / 17.8 ms, then 2.5 / 9.1 / 14.8 ms; 5 loads per size, tiny documents, local database. Run it again on the owner's machine before using any number.
+
+| File | Project | Covers |
+|---|---|---|
+| `packages/shared/src/yjs.test.ts` | unit | AC-5.1, AC-5.2 on bare Yjs: handshake, different/same section, simultaneous insert/delete, formatting, repeated and out-of-order delivery (30 seeded shuffles), 25 seeded 5-replica random runs, local/remote handling |
+| `packages/shared/src/collab.test.ts` | unit | document-name helpers and constants |
+| `packages/editor/src/collaboration.test.ts` | unit (jsdom) | the same scenarios through real Tiptap editors, 5 seeded 3-editor random runs, compatibility of the Phase 4 JSON with the Y.Doc (seed and read back) |
+| `packages/db/test/document-store.int.test.ts` | integration | AC-5.3 to AC-5.8: diff-only append, no-op store, deletions, per-client maximum vector, parallel stores and compaction, atomic compaction (injected failure), disordered/duplicated stored rows, recovery after restart (new client), 12 seeded random histories, commit boundary, constraints, seeding |
+| `packages/db/test/document-load-baseline.int.test.ts` | integration | AC-5.9: prints load time for 10/100/400 pending rows with node/platform; asserts only correctness; the owner's first real run is recorded below |
+
+Run: `pnpm test --testTimeout=20000`. The new int tests need `pnpm db:migrate:deploy` first.
+
+#### Owner verification on the owner's machine (2026-11-16)
+
+**Environment:** Windows (win32/x64), Node v24.18.0, pnpm 12.18.0, PostgreSQL 17 (`postgres:17-alpine`) and Redis 7 (`redis:7-alpine`) from the project's Docker Compose, PostgreSQL on host port 5433. CPU model and RAM were not recorded; add them here before quoting any number outside this project.
+
+| Check | Result |
+|---|---|
+| `pnpm install` | No peer-dependency warnings; `pnpm why yjs` reports a single version, 13.6.33 |
+| `pnpm db:generate`, `pnpm db:migrate:deploy`, `pnpm db:migrate:status` | 5 migrations found; no pending migrations (the Phase 5 migration `20261116120000_yjs_document_store` had already been applied); database schema up to date |
+| Scratch-database drift check (`migrate:dev` against an empty `conote_scratch`) | All 5 migrations applied from empty, including `20261116120000_yjs_document_store`; no new migration proposed; a second run reported "Already in sync"; `git status` showed no stray migration |
+| `pnpm lint`, `pnpm format:check`, `pnpm typecheck` | All clean (the Phase 3 formatting and `infra/docker-compose.yml` findings of the preparation environment did not appear) |
+| `pnpm test --testTimeout=20000` | 43 files, 802 tests passed; duration 139.5 s |
+| Real process restart | A process stored two updates with `DocumentStore.appendDiff` and was killed with SIGKILL; a new process called `load` and recovered both paragraphs exactly (`exists: true`, `appliedRows: 2`, `foldedSeq: 0`); storing the reloaded document again wrote nothing (`stored: false`) |
+
+**PERF-06 baseline, owner's machine** (5 loads per size, tiny documents, local Docker PostgreSQL; first measured value, not a target):
+
+| Unfolded update rows | Update bytes | `load` median (ms) | min / max (ms) |
+|---|---|---|---|
+| 10 | 218 | 6.1 | 5.8 / 15.9 |
+| 100 | 1,838 | 8.7 | 8.2 / 10.4 |
+| 400 | 7,799 | 11.2 | 10.7 / 11.6 |
+
+Raw line printed by the harness: `PERF-06 baseline {"node":"v24.18.0","platform":"win32/x64","results":[{"pendingRows":10,"runs":5,"loadMsMedian":6.1,"loadMsMin":5.8,"loadMsMax":15.9,"totalUpdateBytes":218},{"pendingRows":100,"runs":5,"loadMsMedian":8.7,"loadMsMin":8.2,"loadMsMax":10.4,"totalUpdateBytes":1838},{"pendingRows":400,"runs":5,"loadMsMedian":11.2,"loadMsMin":10.7,"loadMsMax":11.6,"totalUpdateBytes":7799}]}`. These numbers supersede the preparation-environment numbers above for this project; they say nothing about large documents, real network latency or concurrent users. The individual commands were run separately; `pnpm check` as one command was not run.

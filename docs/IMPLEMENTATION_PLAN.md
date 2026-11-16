@@ -258,6 +258,8 @@ AC-1.8 is met at spike level. AC-1.9 remains partial pending item-by-item review
 
 ## Phase 5 – Yjs CRDT Integration
 
+**Status (2026-11-16):** implemented and executed in a preparation environment: 802 tests pass (unit and integration), typecheck and lint clean. Owner verification on the owner's machine is pending. See HANDOVER §10.8 for the per-criterion status and the fixes this run needed.
+
 **Objectives:** Bind the editor to Yjs and build the durable document store as a tested library, proving G1, G2 and G4 **without any network server**.
 
 **Scope:** FR-RT-01, client-side part of FR-RT-03, FR-SC-02 (store). No WebSocket server (Phase 6).

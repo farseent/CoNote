@@ -1,5 +1,6 @@
 export * from './assets.js';
 export * from './auth.js';
+export * from './collab.js';
 export * from './editor-content.js';
 export * from './env.js';
 export * from './envelope.js';
@@ -10,3 +11,4 @@ export * from './page-content.js';
 export * from './page-position.js';
 export * from './permissions.js';
 export * from './workspaces.js';
+export * from './yjs.js';

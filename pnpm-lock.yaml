@@ -343,6 +343,9 @@ importers:
       pg:
         specifier: 8.23.1
         version: 8.23.1
+      yjs:
+        specifier: 13.6.33
+        version: 13.6.33
     devDependencies:
       '@types/pg':
         specifier: 8.23.1
@@ -362,6 +365,9 @@ importers:
       '@tiptap/core':
         specifier: 3.33.1
         version: 3.33.1(@tiptap/pm@3.33.1)
+      '@tiptap/extension-collaboration':
+        specifier: 3.33.1
+        version: 3.33.1(@tiptap/core@3.33.1(@tiptap/pm@3.33.1))(@tiptap/pm@3.33.1)(@tiptap/y-tiptap@3.0.7(prosemirror-model@1.25.13)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33))(yjs@13.6.33)
       '@tiptap/extension-image':
         specifier: 3.33.1
         version: 3.33.1(@tiptap/core@3.33.1(@tiptap/pm@3.33.1))
@@ -386,9 +392,21 @@ importers:
       '@tiptap/suggestion':
         specifier: 3.33.1
         version: 3.33.1(@floating-ui/dom@1.8.0)(@tiptap/core@3.33.1(@tiptap/pm@3.33.1))(@tiptap/pm@3.33.1)
+      '@tiptap/y-tiptap':
+        specifier: 3.0.7
+        version: 3.0.7(prosemirror-model@1.25.13)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)
+      y-protocols:
+        specifier: 1.0.7
+        version: 1.0.7(yjs@13.6.33)
+      yjs:
+        specifier: 13.6.33
+        version: 13.6.33
 
   packages/shared:
     dependencies:
+      yjs:
+        specifier: 13.6.33
+        version: 13.6.33
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -1499,6 +1517,14 @@ packages:
     peerDependencies:
       '@tiptap/core': 3.33.1
 
+  '@tiptap/extension-collaboration@3.33.1':
+    resolution: {integrity: sha512-0LBCwDlDTEKxK9UsLmIQEjDN6huO3NciPTO2XqJ2+sYBvTBQQKjHn3fq7UkHTZKfJPuvCyZNSktTpSApiEK33Q==}
+    peerDependencies:
+      '@tiptap/core': 3.33.1
+      '@tiptap/pm': 3.33.1
+      '@tiptap/y-tiptap': ^3.0.7
+      yjs: ^13
+
   '@tiptap/extension-document@3.33.1':
     resolution: {integrity: sha512-05pRvgrunBDwTXES/3Pe7O4vXgggqRksm3hZbtVZPmaSYogfzePZj4NbGomKJKPs1iyA2fhfgZZHowk/rHWZRQ==}
     peerDependencies:
@@ -1633,6 +1659,16 @@ packages:
       '@floating-ui/dom': ^1.0.0
       '@tiptap/core': 3.33.1
       '@tiptap/pm': 3.33.1
+
+  '@tiptap/y-tiptap@3.0.7':
+    resolution: {integrity: sha512-3VG01F7i2JDghWsBZSBKi7ypMiN5UVVSyD18IwoXx7ilm0ZynrTS+XNpmgxfuiSBjdauWk7tUlP04xfM8Bw4Vw==}
+    engines: {node: '>=16.0.0', npm: '>=8.0.0'}
+    peerDependencies:
+      prosemirror-model: ^1.7.1
+      prosemirror-state: ^1.2.3
+      prosemirror-view: ^1.9.10
+      y-protocols: ^1.0.1
+      yjs: ^13.5.38
 
   '@types/aria-query@5.0.4':
     resolution: {integrity: sha512-rfT93uj5s0PRL7EzccGMs3brplhcrghnDoV26NqKhCAS1hVo+WdNsPvE/yb6ilfr5hi2MEk6d5EWJTKdxg8jVw==}
@@ -4257,6 +4293,13 @@ snapshots:
     dependencies:
       '@tiptap/core': 3.33.1(@tiptap/pm@3.33.1)
 
+  '@tiptap/extension-collaboration@3.33.1(@tiptap/core@3.33.1(@tiptap/pm@3.33.1))(@tiptap/pm@3.33.1)(@tiptap/y-tiptap@3.0.7(prosemirror-model@1.25.13)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33))(yjs@13.6.33)':
+    dependencies:
+      '@tiptap/core': 3.33.1(@tiptap/pm@3.33.1)
+      '@tiptap/pm': 3.33.1
+      '@tiptap/y-tiptap': 3.0.7(prosemirror-model@1.25.13)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)
+      yjs: 13.6.33
+
   '@tiptap/extension-document@3.33.1(@tiptap/core@3.33.1(@tiptap/pm@3.33.1))':
     dependencies:
       '@tiptap/core': 3.33.1(@tiptap/pm@3.33.1)
@@ -4415,6 +4458,15 @@ snapshots:
       '@floating-ui/dom': 1.8.0
       '@tiptap/core': 3.33.1(@tiptap/pm@3.33.1)
       '@tiptap/pm': 3.33.1
+
+  '@tiptap/y-tiptap@3.0.7(prosemirror-model@1.25.13)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)':
+    dependencies:
+      lib0: 0.2.120
+      prosemirror-model: 1.25.13
+      prosemirror-state: 1.4.4
+      prosemirror-view: 1.42.9
+      y-protocols: 1.0.7(yjs@13.6.33)
+      yjs: 13.6.33
 
   '@types/aria-query@5.0.4': {}
 
