@@ -88,6 +88,11 @@ export const apiEnvSchema = z
     SESSION_IDLE_TTL_DAYS: days(7),
     /** Absolute session lifetime; docs/DECISIONS.md D5 (30 days). */
     SESSION_ABSOLUTE_TTL_DAYS: days(30),
+    /**
+     * Directory of the local-disk image storage adapter (D55). Relative paths are resolved
+     * against the API's working directory. Use a persistent volume; it is not a database.
+     */
+    ASSET_STORAGE_DIR: z.string().min(1).default('.data/assets'),
   })
   .transform((env) => ({
     ...env,

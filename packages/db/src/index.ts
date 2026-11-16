@@ -6,8 +6,10 @@ export { listExpectedMigrations } from './migrations.js';
 export type { DatabaseCheckOptions } from './health.js';
 export type {
   ActivityLog,
+  Asset,
   Invitation,
   Page,
+  PageContent,
   PagePermission,
   Session,
   User,

@@ -68,7 +68,7 @@ Requirements (Dockerfiles written in Phase 11, development Dockerfiles may appea
 
 ## 4. Configuration
 
-Environment variable names for shared, API, collab and web are **implemented as of Phase 1** (see `.env.example` and D40): `NODE_ENV`, `LOG_LEVEL`, `DATABASE_URL`, `REDIS_URL`, `PORT`, `APP_URL`, `ALLOWED_ORIGINS`, `COLLAB_PORT`, `API_INTERNAL_URL`, and (Phase 2) `TRUST_PROXY`, `SESSION_IDLE_TTL_DAYS`, `SESSION_ABSOLUTE_TTL_DAYS`. All other names below remain provisional until the phase that uses them. Values shown are the initial defaults from DECISIONS.md/WEBSOCKET_PROTOCOL.md; "—" means no default and must be set. Secrets are never committed; production secrets come from the chosen secret store (platform secrets or an encrypted env file on a VM).
+Environment variable names for shared, API, collab and web are **implemented as of Phase 1** (see `.env.example` and D40): `NODE_ENV`, `LOG_LEVEL`, `DATABASE_URL`, `REDIS_URL`, `PORT`, `APP_URL`, `ALLOWED_ORIGINS`, `COLLAB_PORT`, `API_INTERNAL_URL`, and (Phase 2) `TRUST_PROXY`, `SESSION_IDLE_TTL_DAYS`, `SESSION_ABSOLUTE_TTL_DAYS`, and (Phase 4) `ASSET_STORAGE_DIR`. All other names below remain provisional until the phase that uses them. Values shown are the initial defaults from DECISIONS.md/WEBSOCKET_PROTOCOL.md; "—" means no default and must be set. Secrets are never committed; production secrets come from the chosen secret store (platform secrets or an encrypted env file on a VM).
 
 ### Shared
 
@@ -95,6 +95,7 @@ Environment variable names for shared, API, collab and web are **implemented as 
 | `ALLOWED_ORIGINS` | Origin allow-list for CSRF/CORS (D25) | `APP_URL` |
 | `TRUST_PROXY` | Comma-separated proxy IPs / CIDRs / `loopback` / `linklocal` / `uniquelocal` whose `X-Forwarded-For` is trusted (D43). **Production requires a reverse proxy in front of the web app that sets `X-Forwarded-For`; the web app must be reachable only through it** (ARCHITECTURE §10.3) | empty (trust none) |
 | `SESSION_IDLE_TTL_DAYS` / `SESSION_ABSOLUTE_TTL_DAYS` | Session lifetimes in days, 1–365 (D5, D42) | `7` / `30` |
+| `ASSET_STORAGE_DIR` | Directory of the local-disk image storage adapter (D55). Must be a persistent volume in production and is suitable for a single API instance only; several instances need an S3-compatible adapter, which is not implemented. The Docker `apps` profile does not mount a volume for it yet, so images written there are lost when the container is recreated | `.data/assets` |
 | *(not a variable)* session cookie name | `__Host-conote_session` when `NODE_ENV=production`, else `conote_session` (D42) | — |
 | *(not variables)* Argon2id parameters | Fixed in code: m = 19456 KiB, t = 2, p = 1 (ARCHITECTURE §10.1). `ARGON2_*` variables were not implemented; add them only if tuning per environment becomes necessary | — |
 | `INVITATION_TTL_DAYS` | Invitation lifetime (D30) | `7` |

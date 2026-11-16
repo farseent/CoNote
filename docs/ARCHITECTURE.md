@@ -1,7 +1,7 @@
 # CoNote – Architecture
 
 **Status:** Phase 1 infrastructure and **Phase 2 authentication (§10)** are implemented and locally verified by the owner. Decisions D41–D47 were accepted by the owner on 2026-11-13. The collaboration architecture, persistence model and the remaining product features remain design-only.
-**Last updated:** 2026-11-14
+**Last updated:** 2026-11-16
 
 Decision IDs (`D#`) and unresolved IDs (`U#`) are defined in [DECISIONS.md](DECISIONS.md). Requirement IDs (`FR-*`, `NFR-*`, `PERF-*`) are in [PROJECT_MASTER.md](PROJECT_MASTER.md). Statements marked **(to verify)** are assumptions that the Phase 1 spike or a named phase must confirm before they are relied on (collected in §18).
 
@@ -515,3 +515,12 @@ Not fetched during Phase 0 (confirm when implementing):
 - **Access events:** after the transaction commits, the API publishes `member.role_changed`, `member.removed`, `workspace.deleted` and `page.access_changed` to the Redis access-event channel (best effort; D22). The collaboration server does not consume them yet (Phase 6).
 - **Jobs:** `page-purge` deletes pages in the trash longer than 30 days (every 6 hours, idempotent), alongside `session-cleanup`.
 - **Web:** server route pages guard; client components load through the typed API client (D53).
+
+## 21. Phase 4: editor, interim content persistence and images (2026-11-15)
+
+- **Status:** D54, D55 and D56 were accepted by the owner on 2026-11-16; the Phase 4 implementation was verified locally by the owner the same day (HANDOVER §9.11). The local-disk image backend and the interim `page_contents` store remain stop-gaps (U7 open; D54 is removed in Phase 6).
+- **Packages:** `packages/shared/src/editor-content.ts` is the single definition of the document format (D56): node/mark/attribute rules, content expressions, limits and `validateEditorDocument`. `packages/editor` builds the Tiptap extension set from an `ExtensionRegistry` of features (extensions plus slash commands) and exports `createDefaultRegistry`, `createEditorExtensions`, the slash-command definitions and filter, and the `SlashCommand` extension (on `@tiptap/suggestion`). It has no network, storage or React code; the host passes callbacks (for example `requestImage`) and a menu renderer. It re-exports a few Tiptap types so the web app sees the command typings without depending on every extension package.
+- **Web:** `apps/web/src/components/editor/` holds `PageEditor` (load, editor, autosave wiring, image upload, conflict handling), the toolbar (one tab stop, arrow-key navigation, contextual table controls, inline link form), the slash menu renderer (React, positioned with `@floating-ui/dom`, listbox semantics) and the save indicator. `lib/autosave.ts` is a pure state machine (debounce, max wait, one request in flight, retry with growing delays, conflict/blocked/refused states); `lib/image-upload.ts` runs the three-step upload. The editor is read-only for roles below `EDITOR`, and the server enforces the same rule.
+- **Persistence (interim, D54):** `CONTENT-01/02` store validated ProseMirror JSON in `page_contents` with a revision compare-and-set; documents are validated on write and on read. A save that outlives its editor (navigation) is tracked so the next page load waits for it. This is replaced by the document store in Phase 5/6; the JSON seeds the `Y.Doc`.
+- **Images (D55):** the API talks to a `StorageAdapter` interface; the local-disk adapter validates object keys (`<uuid>/<uuid>`) and writes atomically. Uploaded bytes are checked against the announced size and the file's signature before an asset becomes `READY`; SVG is not accepted. `ASSET-04` (raw-body upload) is the single exception to the JSON-only rule of D25 and is scoped to one route and four image types. An hourly `asset-cleanup` job removes abandoned uploads and orphaned images.
+- **Collaboration readiness:** the extension set can drop built-in undo/redo (`undoRedo: false`); the document schema contains nothing that a `Y.Doc` cannot represent; Yjs, cursors and WebSocket collaboration are not implemented.

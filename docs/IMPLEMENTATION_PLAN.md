@@ -252,6 +252,8 @@ AC-1.8 is met at spike level. AC-1.9 remains partial pending item-by-item review
 **Testing requirements:** `UT`, `API` (assets), `E2E`, `SEC` (upload validation, image access control).
 **Completion requirements:** Definition of Done; HANDOVER.md.
 
+**Phase 4 status: implemented 2026-11-15 under the owner's instruction to do what is best for now; owner-verified locally 2026-11-16; D54–D56 accepted 2026-11-16; final owner acceptance pending.** Evidence and open items are in HANDOVER §9 and §9.11. Scope decisions that depart from the text above, all accepted: **D54** (interim content persistence and autosave, although "persistence of document content" was listed as out of scope), **D55** (image flow with a local-disk adapter; S3/MinIO and avatar upload deferred, so `USER-02 avatarAssetId` and the avatar part of FR-AUTH-05 are **not** done), **D56** (document schema). Summary against the criteria: AC-4.2, AC-4.4 and AC-4.6 are met by automated tests. AC-4.1 is met by component/unit tests plus the owner's manual browser walkthrough of every feature; there are **no automated** browser E2E tests (Playwright). AC-4.3 is met against the local-disk adapter (API tests and the owner's browser check of button, paste and drag-and-drop uploads), **not** against object storage. AC-4.5 is covered by jsdom keyboard tests and the owner's manual keyboard check, not an automated E2E test or a screen-reader check. AC-4.7 is only partly met (flow, limits and types recorded and accepted; production storage backend open under U7).
+
 ---
 
 ## Phase 5 – Yjs CRDT Integration

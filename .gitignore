@@ -10,6 +10,9 @@ coverage/
 .env.*
 !.env.example
 
+# Uploaded images of the local-disk storage adapter
+.data/
+
 # Generated Prisma client
 packages/db/src/generated/
 

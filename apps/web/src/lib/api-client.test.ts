@@ -156,3 +156,69 @@ describe('user-facing messages', () => {
     expect(fieldErrorsFromApi(new Error('x'))).toEqual({});
   });
 });
+
+describe('page content and image calls', () => {
+  const okBody = { success: true, data: null };
+  const stub = () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(respond(200, okBody)));
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  };
+  const lastCall = (fetchMock: ReturnType<typeof stub>) =>
+    fetchMock.mock.calls[fetchMock.mock.calls.length - 1] as [string, RequestInit];
+
+  it('reads and saves page content as JSON', async () => {
+    const fetchMock = stub();
+    await api.getPageContent('p/1');
+    expect(lastCall(fetchMock)[0]).toBe('/api/v1/pages/p%2F1/content');
+    expect(lastCall(fetchMock)[1].method).toBe('GET');
+
+    const content = { type: 'doc' as const, content: [{ type: 'paragraph' }] };
+    await api.savePageContent('p1', { baseRevision: 3, content });
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe('/api/v1/pages/p1/content');
+    expect(init.method).toBe('PUT');
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(JSON.parse(init.body as string)).toEqual({ baseRevision: 3, content });
+  });
+
+  it('sends image bytes unchanged with the announced content type', async () => {
+    const fetchMock = stub();
+    const file = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' });
+    await api.uploadImageBytes(
+      {
+        url: '/api/v1/assets/a1/content',
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/png' },
+        expiresAt: '2026-11-15T00:00:00.000Z',
+      },
+      file,
+    );
+    const [url, init] = lastCall(fetchMock);
+    expect(url).toBe('/api/v1/assets/a1/content');
+    expect(init.method).toBe('PUT');
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('image/png');
+    expect(init.body).toBe(file);
+    expect(init.credentials).toBe('same-origin');
+  });
+
+  it('authorizes and confirms uploads as JSON', async () => {
+    const fetchMock = stub();
+    await api.authorizeImageUpload({
+      purpose: 'PAGE_IMAGE',
+      pageId: 'p1',
+      contentType: 'image/png',
+      sizeBytes: 5,
+    });
+    expect(lastCall(fetchMock)[0]).toBe('/api/v1/assets/uploads');
+    await api.completeImageUpload('a/1');
+    expect(lastCall(fetchMock)[0]).toBe('/api/v1/assets/a%2F1/complete');
+    expect(lastCall(fetchMock)[1].body).toBe('{}');
+  });
+
+  it('describes a too-large save', () => {
+    expect(
+      describeApiError(new ApiError({ status: 413, code: 'PAYLOAD_TOO_LARGE', message: 'x' })),
+    ).toMatch(/too large/);
+  });
+});

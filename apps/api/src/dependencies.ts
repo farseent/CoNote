@@ -4,6 +4,8 @@ import type { DependencyStatus } from '@conote/shared';
 import { checkDatabase, createPrismaClient, type PrismaClient } from '@conote/db';
 import type { Clock } from './config.js';
 import { checkRedis, connectInBackground, createRedisClient } from './redis.js';
+import { LocalStorageAdapter } from './storage/local-storage.js';
+import type { StorageAdapter } from './storage/storage-adapter.js';
 
 /** Runtime dependencies of the API. Tests can substitute their own. */
 export interface Dependencies {
@@ -11,13 +13,15 @@ export interface Dependencies {
   redis: Redis;
   /** Source of "now" for every session decision; replaceable in tests. */
   clock: Clock;
+  /** Image storage behind the adapter interface (D10, D55). */
+  storage: StorageAdapter;
   checkPostgres(): Promise<DependencyStatus>;
   checkRedis(): Promise<DependencyStatus>;
   close(): Promise<void>;
 }
 
 export function createDependencies(
-  env: { DATABASE_URL: string; REDIS_URL: string },
+  env: { DATABASE_URL: string; REDIS_URL: string; ASSET_STORAGE_DIR: string },
   logger: Logger,
 ): Dependencies {
   const prisma = createPrismaClient(env.DATABASE_URL);
@@ -33,6 +37,7 @@ export function createDependencies(
     prisma,
     redis,
     clock: () => new Date(),
+    storage: new LocalStorageAdapter(env.ASSET_STORAGE_DIR),
     checkPostgres: () => checkDatabase(prisma),
     checkRedis: () => checkRedis(redis),
     close: async () => {

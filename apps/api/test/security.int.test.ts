@@ -32,6 +32,8 @@ describe('rate limiting', () => {
       config: {
         rateLimits: {
           general: RELAXED,
+          contentSave: RELAXED,
+          assetUpload: RELAXED,
           invitation: RELAXED,
           register: RELAXED,
           password: RELAXED,
@@ -65,6 +67,8 @@ describe('rate limiting', () => {
       config: {
         rateLimits: {
           general: RELAXED,
+          contentSave: RELAXED,
+          assetUpload: RELAXED,
           invitation: RELAXED,
           register: RELAXED,
           password: RELAXED,
@@ -96,6 +100,8 @@ describe('rate limiting', () => {
       config: {
         rateLimits: {
           general: RELAXED,
+          contentSave: RELAXED,
+          assetUpload: RELAXED,
           invitation: RELAXED,
           login: RELAXED,
           password: RELAXED,
@@ -116,6 +122,8 @@ describe('rate limiting', () => {
       config: {
         rateLimits: {
           general: RELAXED,
+          contentSave: RELAXED,
+          assetUpload: RELAXED,
           invitation: RELAXED,
           login: RELAXED,
           register: RELAXED,
@@ -152,6 +160,8 @@ describe('rate limiting', () => {
           password: RELAXED,
           loginAccount: RELAXED,
           general: { max: 3, timeWindowMs: MINUTE },
+          contentSave: RELAXED,
+          assetUpload: RELAXED,
         },
       },
     });

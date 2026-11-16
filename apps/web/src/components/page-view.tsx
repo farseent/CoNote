@@ -9,14 +9,15 @@ import { useAuth } from '@/lib/auth-context';
 import { descendantIds, displayTitle, flattenTree } from '@/lib/page-tree';
 import { roleLabel } from '@/lib/roles';
 import { useLoad } from '@/lib/use-load';
+import { PageEditor } from './editor/page-editor';
 import { FormMessage } from './form-parts';
 import { PagePermissionsPanel } from './page-permissions-panel';
 import { canEditPageDto, useWorkspace } from './workspace-context';
 
 /**
- * One page: breadcrumbs, title, structure actions (move, delete) and, for workspace admins,
- * the permissions panel. The document body itself (rich-text editor, real-time sync) arrives
- * in later phases; this phase builds the organizational structure around it.
+ * One page: breadcrumbs, title, the rich-text editor, structure actions (move, delete) and,
+ * for workspace admins, the permissions panel. The editor is single-user for now; real-time
+ * sync arrives in Phases 5 and 6.
  */
 export function PageView({ pageId }: { pageId: string }) {
   // Remount per page so all local state (delete confirmation, panels, errors, title draft) resets.
@@ -104,7 +105,7 @@ export function PageViewInner({ pageId }: { pageId: string }) {
     });
 
   return (
-    <article className="flex max-w-3xl flex-col gap-5" aria-label={displayTitle(page.title)}>
+    <article className="flex max-w-4xl flex-col gap-5" aria-label={displayTitle(page.title)}>
       <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
         <ol className="flex flex-wrap items-center gap-1">
           <li>
@@ -155,10 +156,7 @@ export function PageViewInner({ pageId }: { pageId: string }) {
         </p>
       </div>
 
-      <div className="rounded-md border border-dashed border-slate-300 p-6 text-sm text-slate-600">
-        The document editor arrives in a later phase. This page is ready for it: it has a place in
-        the hierarchy, a title and permissions.
-      </div>
+      <PageEditor key={page.id} pageId={page.id} canEdit={canEdit} />
 
       {canEdit || isAdmin ? (
         <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">

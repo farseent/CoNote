@@ -24,6 +24,10 @@ export interface RateLimits {
   password: RateLimitRule;
   /** Per client IP: invitation preview and accept, which take a bearer token (INV-05, INV-06). */
   invitation: RateLimitRule;
+  /** Per client IP: CONTENT-02, the editor's autosave (D54). */
+  contentSave: RateLimitRule;
+  /** Per client IP: image upload authorization, upload and completion (ASSET-01, -02, -04; D55). */
+  assetUpload: RateLimitRule;
 }
 
 const MINUTE = 60_000;
@@ -36,6 +40,10 @@ export const DEFAULT_RATE_LIMITS: RateLimits = {
   loginAccount: { max: 10, timeWindowMs: 15 * MINUTE },
   password: { max: 5, timeWindowMs: 15 * MINUTE },
   invitation: { max: 20, timeWindowMs: 15 * MINUTE },
+  // Autosave sends at most a few requests a minute per open editor; this leaves room for
+  // several tabs and for several people behind one address.
+  contentSave: { max: 240, timeWindowMs: MINUTE },
+  assetUpload: { max: 120, timeWindowMs: 15 * MINUTE },
 };
 
 export interface ApiConfig {

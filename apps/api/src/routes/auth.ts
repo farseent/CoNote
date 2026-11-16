@@ -26,7 +26,9 @@ import { SessionService, USER_SELECT, type ClientMeta } from '../auth/sessions.j
 import { rateLimitConfig } from '../plugins/security.js';
 import { AccessService } from '../workspaces/access.js';
 import { registerActivityRoutes } from './activity.js';
+import { registerAssetRoutes } from './assets.js';
 import { registerInvitationPublicRoutes, registerInvitationRoutes } from './invitations.js';
+import { registerPageContentRoutes } from './page-content.js';
 import { registerPagePermissionRoutes } from './page-permissions.js';
 import { registerPageRoutes } from './pages.js';
 import { registerUserRoutes } from './users.js';
@@ -293,5 +295,9 @@ export async function registerAuthRoutes(
     await registerPageRoutes(guarded, dependencies, config, access);
     await registerPagePermissionRoutes(guarded, dependencies, config, access);
     await registerActivityRoutes(guarded, dependencies, config, access);
+
+    // ───────────── Phase 4: editor content (interim, D54) and images (D55) ─────────────
+    await registerPageContentRoutes(guarded, dependencies, config, access);
+    await registerAssetRoutes(guarded, dependencies, config, access);
   });
 }

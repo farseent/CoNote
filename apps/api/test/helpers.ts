@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { pino } from 'pino';
 import { createPrismaClient } from '@conote/db';
 import { createApiConfig, DEFAULT_RATE_LIMITS, type ApiConfig } from '../src/config.js';
 import type { Dependencies } from '../src/dependencies.js';
 import { connectInBackground, createRedisClient } from '../src/redis.js';
+import { LocalStorageAdapter } from '../src/storage/local-storage.js';
 import { UNREACHABLE_DATABASE_URL, UNREACHABLE_REDIS_URL } from '../../../tests/helpers.js';
 
 export const TEST_ORIGIN = 'http://localhost:3000';
@@ -28,6 +31,8 @@ export function testConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
       loginAccount: RELAXED,
       password: RELAXED,
       invitation: RELAXED,
+      contentSave: RELAXED,
+      assetUpload: RELAXED,
     },
     // A fresh namespace per app keeps rate-limit counters isolated between tests.
     rateLimitNamespace: `conote:rl:test:${randomUUID()}:`,
@@ -48,6 +53,7 @@ export function unconnectedDependencies(
     prisma: createPrismaClient(UNREACHABLE_DATABASE_URL),
     redis: createRedisClient(UNREACHABLE_REDIS_URL),
     clock: () => new Date(),
+    storage: new LocalStorageAdapter(join(tmpdir(), 'conote-unused-assets')),
     ...checks,
     close: async () => {},
   };

@@ -1,7 +1,7 @@
 # CoNote – Testing Strategy
 
 **Status:** Phase 1a test foundation (reported passing by the owner: 9 files, 59 tests) plus **Phase 2 authentication tests, run by Claude in a preparation environment: 17 files, 228 tests passed (115 unit + 113 integration), twice in a row** (§8.0a). The Phase 1b spike harness is under `spikes/collab-poc/`. **Phase 3 tests were run by the owner on 2026-11-15 against PostgreSQL and Redis: `pnpm check` passed with 482 tests** (§8.0b). Tests for editing and collaboration do not exist yet. **Browser E2E (Playwright) is not implemented.**
-**Last updated:** 2026-11-15
+**Last updated:** 2026-11-16
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); requirements and metrics (`FR-*`, `NFR-*`, `PERF-*`) in [PROJECT_MASTER.md](PROJECT_MASTER.md); guarantees `G1`–`G7` in [ARCHITECTURE.md](ARCHITECTURE.md) §8; phases and acceptance criteria (`AC-*`) in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
@@ -248,6 +248,46 @@ Phase 3 was written without PostgreSQL, Redis or pnpm, so the tests were first r
 | `apps/web/src/lib/page-tree.test.ts`, `apps/web/src/components/workspace-flows.test.tsx` | UT (jsdom) | Tree building/ordering, dashboard, create form, tree navigation, member and invitation management, invite page |
 
 **Not covered, stated plainly:** AC-3.11 automated browser E2E (Playwright is not implemented; the API-level flow tests and the owner's manual walkthrough approximate it); the page-view, settings, trash and permissions-panel components have no component tests; real-browser layout/responsiveness; concurrency beyond the concurrent-accept test; the effect of a PostgreSQL collation on ordering (ordering is done in the application, D50).
+
+### 8.0c Phase 4 tests (written and run by Claude, 2026-11-15)
+
+Environment: Node 24.18.0, pnpm 12.18.0, **PostgreSQL 16.15** and Redis 7.0.15 installed from Ubuntu packages (the project targets PostgreSQL 17), no browser, no Docker. The Prisma schema engine could not be downloaded, so migrations were applied with a script that runs the SQL files (see DATABASE_SCHEMA §13). Result of `pnpm test --testTimeout=20000`: **38 files, 692 tests passed** (the Phase 3 baseline reproduced in the same environment: 27 files, 482 tests; Phase 4 adds 11 files and 210 tests). Lint reports no problems, typecheck and `pnpm build` pass.
+
+| File | Type | Tests | Covers |
+|---|---|---|---|
+| `packages/shared/src/editor-content.test.ts` | UT | 14 | Document validator: structure, attributes, marks, limits, hostile keys, link rules, no echo of content |
+| `packages/shared/src/assets.test.ts` | UT | 6 | Image signature detection, asset URL, upload request schema, `ASSET_STORAGE_DIR` |
+| `packages/editor/src/schema-conformance.test.ts` | UT | 43 | Shared schema model equals the real ProseMirror schema; validator and ProseMirror agree on structure; validator is stricter on values |
+| `packages/editor/src/editor-behavior.test.ts` | UT | 22 | Every approved formatting feature in a headless editor, undo/redo and its removal (AC-4.6), read-only, round trip, invalid content, slash commands |
+| `packages/editor/src/registry.test.ts` | UT | 4 | Registry, custom extension without core changes (AC-4.2), unapproved StarterKit features absent |
+| `packages/editor/src/slash-commands.test.ts` | UT | 5 | Slash filtering and ranking, image command hidden without a host |
+| `apps/api/test/page-content.int.test.ts` | API | 30 | CONTENT-01/02: round trip, revisions, 409 on stale and simultaneous saves, validation, 413/400 size limits, viewers/commenters 403, non-members 404, overrides, trash, purge cascade, Origin/content-type, rate limit, stored-content corruption |
+| `apps/api/test/assets.int.test.ts` | API/SEC | 24 | ASSET-01…04: full flow and byte-identical read, types and sizes (415/413), roles, uploader-only, expiry, signature and size mismatch (409), disguised script, Origin and raw-body exemption scope, access control on read, cleanup job, storage key safety |
+| `apps/web/src/lib/autosave.test.ts` | UT | 14 | Autosave controller with fake timers |
+| `apps/web/src/lib/image-upload.test.ts` | UT | 9 | Client checks and error mapping |
+| `apps/web/src/lib/api-client.test.ts` | UT | +4 | Content and image calls, raw upload headers |
+| `apps/web/src/components/editor/page-editor.test.tsx` | UT (jsdom) | 35 | Loading and error states, read-only viewers, autosave, retry, conflict choices, permission loss, leaving, toolbar (one tab stop, arrow keys, every control), links, tables, images, slash menu keyboard and mouse |
+
+Also executed (not part of the suite): a smoke test against the **built** API and web servers through the Next.js proxy: a 992 KB document saved and read back identical, a stale save answered 409, an invalid document 400, a 2 MB image uploaded as raw bytes through the proxy and read back with an identical hash, SVG refused, a script renamed to PNG refused.
+
+**Not covered:** browser end-to-end tests (Playwright was not available), real typing, IME, drag and drop, visual layout and responsiveness (the CSS was written for narrow screens but never rendered), Docker, GitHub Actions, S3-compatible storage.
+
+### 8.0d Phase 4 owner verification (2026-11-16)
+
+Run locally by the owner (Windows, Git Bash, Node 24.18.0, pnpm 12.18.0, PostgreSQL 17 on host port 5433, Redis 7) following HANDOVER §9.8.
+
+| Check | Result |
+|---|---|
+| `pnpm db:migrate:deploy`, `pnpm db:migrate:status` | Passed: `20261115120000_editor_content_assets` applied by Prisma; schema up to date; a second `deploy` found nothing pending |
+| Scratch-database drift check (`migrate:dev` against an empty `conote_scratch`) | Passed: all four migrations applied; second run "Already in sync"; no new migration proposed |
+| `pnpm check`: lint, format check, typecheck | Passed after the two delivery gaps in HANDOVER §9.11 were closed |
+| `pnpm check` tests, default 5 s timeout | 690 of 692 passed; the two `startup.test.ts` cases (api, collab) timed out. Same borderline spawn-heavy timeout recorded for Phase 2 (HANDOVER §7.9) |
+| `pnpm test --testTimeout=20000` | **Passed: 38 files, 692 tests** |
+| Browser: editor, autosave "Saved", reload persistence, toolbar, slash commands | Passed |
+| Browser: every toolbar control and slash command, images by button, paste and drag-and-drop, reload persistence | Passed (owner-reported) |
+| Browser: two-tab conflict (both choices), Viewer/Commenter/Editor roles, offline retry and recovery, phone width, keyboard-only | Passed (owner-reported) |
+
+**Still not covered:** automated browser end-to-end tests (Playwright), screen-reader checks, mobile soft-keyboard and IME behaviour, Docker (the `apps` profile needs a volume for `ASSET_STORAGE_DIR`), GitHub Actions, S3-compatible storage.
 
 ### 8.1 Requirements
 

@@ -9,6 +9,10 @@ import type { Dependencies } from '../dependencies.js';
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const JSON_CONTENT_TYPE = /^application\/json\s*(;|$)/i;
+// ASSET-04 receives raw image bytes. It is exempt from the JSON requirement only for these
+// image types; the Origin check still applies, and a cross-site form cannot send PUT.
+const IMAGE_UPLOAD_ROUTE = /^PUT \/api\/v1\/assets\/[0-9a-f-]{36}\/content$/;
+const IMAGE_CONTENT_TYPE = /^image\/(png|jpeg|gif|webp)\s*(;|$)/i;
 
 /** Route-level `config.rateLimit` for a rule. */
 export function rateLimitConfig(rule: RateLimitRule): { max: number; timeWindow: number } {
@@ -45,7 +49,14 @@ export async function registerSecurity(
       throw new AppError('INVALID_ORIGIN', 'Origin not allowed.');
     }
     const contentType = request.headers['content-type'];
-    if (typeof contentType !== 'string' || !JSON_CONTENT_TYPE.test(contentType)) {
+    const isImageUpload =
+      IMAGE_UPLOAD_ROUTE.test(`${request.method} ${request.url.split('?')[0] ?? ''}`) &&
+      typeof contentType === 'string' &&
+      IMAGE_CONTENT_TYPE.test(contentType);
+    if (
+      !isImageUpload &&
+      (typeof contentType !== 'string' || !JSON_CONTENT_TYPE.test(contentType))
+    ) {
       throw new AppError('UNSUPPORTED_MEDIA_TYPE', 'Unsupported content type.');
     }
   });

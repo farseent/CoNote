@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { Redis } from 'ioredis';
 import { pino, type Logger } from 'pino';
@@ -85,13 +88,15 @@ export function capture(): { logger: Logger; lines: () => string } {
 
 export interface HarnessOptions {
   config?: Partial<ApiConfig>;
-  env?: Partial<{ DATABASE_URL: string; REDIS_URL: string }>;
+  env?: Partial<{ DATABASE_URL: string; REDIS_URL: string; ASSET_STORAGE_DIR: string }>;
   logger?: Logger;
   cookieName?: string;
 }
 
 export async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
-  const infra = { ...requireInfraEnv(), ...options.env };
+  // Each harness gets its own image directory, removed again on close.
+  const assetDir = mkdtempSync(join(tmpdir(), 'conote-assets-'));
+  const infra = { ...requireInfraEnv(), ASSET_STORAGE_DIR: assetDir, ...options.env };
   const logger = options.logger ?? pino({ level: 'silent' });
   const clock = createTestClock();
   const base = createDependencies(infra, logger);
@@ -118,7 +123,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
         ? unsafe && contentType === 'application/json'
           ? '{}'
           : undefined
-        : typeof callOptions.body === 'string'
+        : typeof callOptions.body === 'string' || Buffer.isBuffer(callOptions.body)
           ? callOptions.body
           : JSON.stringify(callOptions.body);
 
@@ -171,6 +176,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
       call('POST', '/api/v1/auth/login', { ...callOptions, body: { email, password } }),
     close: async () => {
       await app.close();
+      rmSync(assetDir, { recursive: true, force: true });
     },
   };
 }

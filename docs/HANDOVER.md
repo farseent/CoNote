@@ -1,12 +1,12 @@
 # CoNote – Handover
 
-**Last updated:** 2026-11-15
+**Last updated:** 2026-11-16
 
-**Current phase:** Phase 3 – Workspaces, Pages and Permissions. **Implemented on 2026-11-14 and owner-verified locally on 2026-11-15 (§8.8):** migration and drift check, lint, format check, typecheck, `pnpm check` (482 tests) and the manual browser walkthrough all passed. **Decisions D48–D53 were accepted by the owner on 2026-11-15; final Phase 3 acceptance is pending.** GitHub Actions CI and the Docker `apps` profile have not been run for Phase 3.
+**Current phase:** Phase 4 – Rich-Text Editor. **Implemented on 2026-11-15; owner-verified locally on 2026-11-16 (§9.11); D54–D56 accepted on 2026-11-16; final Phase 4 acceptance is pending.** The Phase 4 task was issued while final Phase 3 acceptance was still pending; as with Phases 2 and 3, that instruction was treated as approval to start. The task conflicted with the approved plan in two places (persistence/autosave and image storage); the owner answered "do what is best for now", the choices were recorded as proposed decisions D54–D56 and the owner approved them on 2026-11-16. The implementation was first built in a preparation environment (lint, typecheck, build and 692 tests passed against PostgreSQL 16 and Redis 7); the owner then ran Prisma `migrate deploy` and the scratch-database drift check, `pnpm check` (692 tests) and a full browser walkthrough locally (§9.11). **Not executed:** Docker (the `apps` profile needs a volume for `ASSET_STORAGE_DIR`), GitHub Actions, S3/MinIO, Playwright.
 
-**Phase 2 status carried forward:** implementation and owner-run local acceptance are complete (§7.9); D41–D47 accepted; **the owner reports that the Phase 2 GitHub Actions CI run passed (it had been deferred on 2026-11-13); final Phase 2 sign-off was never recorded.** The owner issued the Phase 3 task on 2026-11-14; as with Phase 2, that instruction was treated as approval to start Phase 3 although the sign-off above is still outstanding. The sign-off remains an open item.
+**Phase 3 status carried forward:** implemented and owner-verified locally on 2026-11-15 (§8.8); D48–D53 accepted; **final Phase 3 acceptance, GitHub Actions CI and the Docker `apps` profile check are still open.** Phase 2: owner-verified locally, CI reported passing, final sign-off never recorded.
 
-**Next step:** the owner records Phase 3 acceptance (and the open Phase 2 sign-off/CI items); then Phase 4 – Rich-Text Editor. **Do not start Phase 4 until Phase 3 is accepted.**
+**Next step:** the owner records final acceptance of Phase 3 and Phase 4 (and the open Phase 2 sign-off); decides the production storage backend (U7: S3-compatible adapter, MinIO, avatar upload) before deployment; optionally runs the Docker `apps` profile (with a volume for `ASSET_STORAGE_DIR`) and GitHub Actions; then Phase 5 – Yjs CRDT Integration. **Do not start Phase 5 until Phase 4 is accepted.**
 
 Read `CLAUDE.md` first. This file is the source of truth for current project status.
 
@@ -18,13 +18,13 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 
 | Repository | pnpm monorepo with `apps/web`, `apps/api`, `apps/collab`, `packages/db`, `packages/shared`, `packages/editor`; root scripts, CI, Dockerfiles and local Compose configuration are present |
 
-| Product features | **Implemented but unverified (Phase 3): workspaces, membership and roles, invitations (link-based), nested pages, soft delete/restore/purge, page-level permissions, activity log, and the web UI for all of these (§8).** **Implemented (Phase 2): registration, login, logout, DB-backed sessions, session list/revoke, password change, profile (display name, presence colour) with web pages.** Not implemented: rich-text editor, production Yjs collaboration, presence, comments, version history, avatars (Phase 4), email verification, password reset |
+| Product features | **Implemented but unverified (Phase 3): workspaces, membership and roles, invitations (link-based), nested pages, soft delete/restore/purge, page-level permissions, activity log, and the web UI for all of these (§8).** **Implemented (Phase 2): registration, login, logout, DB-backed sessions, session list/revoke, password change, profile (display name, presence colour) with web pages.** **Implemented, owner-verified locally 2026-11-16 (Phase 4): single-user rich-text editor (headings, bold/italic/underline, lists, checklists, links, tables, images, alignment, slash commands, toolbar) with interim autosave persistence and image upload (§9).** Not implemented: Yjs/real-time collaboration, presence, comments, version history, avatar upload (still open from Phase 4), email verification, password reset |
 
-| API | Fastify foundation, `/health` and `/ready`, (Phase 2) `AUTH-01`–`AUTH-07`, `USER-01`–`USER-02`, and (Phase 3, unverified) `WS-01`–`WS-09`, `INV-01`–`INV-07`, `PAGE-01`–`PAGE-09`, `PP-01`–`PP-03`, `ACT-01`–`ACT-02` under `/api/v1`, with CSRF checks, rate limiting, helmet, CORS, session cleanup job |
+| API | Fastify foundation, `/health` and `/ready`, (Phase 2) `AUTH-01`–`AUTH-07`, `USER-01`–`USER-02`, and (Phase 3, unverified) `WS-01`–`WS-09`, `INV-01`–`INV-07`, `PAGE-01`–`PAGE-09`, `PP-01`–`PP-03`, `ACT-01`–`ACT-02` and, (Phase 4, owner-verified locally) interim `CONTENT-01`–`CONTENT-02` and `ASSET-01`–`ASSET-04` under `/api/v1`, with CSRF checks, rate limiting, helmet, CORS, session cleanup job |
 
 | Collaboration server | Hocuspocus shell and operational endpoints implemented. It deliberately rejects every document connection; this is not a working collaboration service (D38) |
 
-| Database | Prisma 7.10.1; baseline migration, `20261112120000_auth_users_sessions` (`User`, `Session`) and, **unapplied and unverified**, `20261114090000_workspaces_pages_permissions` (Phase 3 models, hand-written SQL incl. the deferred one-owner trigger). That migration is hand-written SQL. The owner's local `migrate deploy`, `migrate status` and scratch-database `migrate:dev` drift check were clean on 2026-11-13 (§7.9). No document persistence exists |
+| Database | Prisma 7.10.1; baseline migration, `20261112120000_auth_users_sessions` (`User`, `Session`) and, `20261114090000_workspaces_pages_permissions` (Phase 3 models, hand-written SQL incl. the deferred one-owner trigger). **Phase 4 adds `20261115120000_editor_content_assets` (`page_contents` — interim — and `assets`, hand-written SQL; §9); the owner's `migrate deploy`, `migrate status` and scratch-database drift check were clean on 2026-11-16 (§9.11).** That migration is hand-written SQL. The owner's local `migrate deploy`, `migrate status` and scratch-database `migrate:dev` drift check were clean on 2026-11-13 (§7.9). Document content is persisted only by the interim `page_contents` table (D54); the Yjs document store does not exist |
 
 | Local infrastructure | PostgreSQL 17 and Redis 7 Compose services reported healthy. PostgreSQL host port 5433 maps to container port 5432; Redis host port 6379 |
 
@@ -36,6 +36,7 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 
 | Phase 2 | Implemented and owner-verified locally. Lint, format check and typecheck passed; 228 tests passed with `--testTimeout=20000`; migration deploy/status and scratch-database drift check passed; browser acceptance checks completed; current-session indicator fixed; Docker app images built and services started; API `/ready` returned HTTP 200 with PostgreSQL and Redis healthy. D41–D47 accepted. GitHub Actions CI for Phase 2 passed (owner-reported; initially deferred). **Final owner sign-off pending.** |
 | Phase 3 | **Implemented 2026-11-14; owner-verified locally 2026-11-15.** Schema validates, client generates, migration deploys and the scratch-database drift check is clean; lint, format check and typecheck pass; `pnpm check` passes with 482 tests (permission matrix 133/133); manual browser walkthrough passed. D48–D53 accepted 2026-11-15. **Not yet done:** final owner acceptance, GitHub Actions CI, Docker `apps` profile check. See §8.8. |
+| Phase 4 | **Implemented 2026-11-15 under the owner's "do what is best for now"; owner-verified locally 2026-11-16.** Migration deploy/status and the scratch-database drift check pass; lint, format check and typecheck pass; 692 tests pass (38 files, with `--testTimeout=20000`); full browser walkthrough passed. D54–D56 accepted 2026-11-16. **Not done:** final owner acceptance, Docker, CI, S3/MinIO storage, avatar upload, automated E2E. See §9 and §9.11. |
 
 ### Decisions and open items
 
@@ -49,7 +50,8 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 
 - **U5 / V8:** Resolved by Phase 1a evidence: Prisma client generation, real database connectivity, successful `migrate deploy`, and `migrate status` reporting up to date.
 
-- **U7 / D37:** Object storage/MinIO is deliberately omitted from Phase 1 Compose; revisit in Phase 4.
+- **U7 / D37 / D55:** (U7 remains partially resolved.) Object storage/MinIO was omitted from Phase 1 Compose. Phase 4 decided the upload flow, allowed types and size limit and implemented them behind a storage adapter with a **local-disk** backend (D55, accepted 2026-11-16); the S3-compatible adapter, MinIO in Compose, MinIO's licensing check and avatar upload remain open.
+- **D54–D56 (Phase 4):** proposed on 2026-11-15; **accepted by the owner on 2026-11-16.** D54 is an interim second source of truth for page content that Phase 6 removes.
 
 - **U13:** Explicit production recovery after Redis Pub/Sub message loss remains a Phase 9 decision. Redis reconnection alone is not proof of reconvergence.
 
@@ -448,6 +450,8 @@ The full scenario evidence and remaining limitations are recorded in docs/spikes
 | 2026-11-15 | Owner verification of Phase 3 completed locally (§8.8): migration/drift check, lint/format/typecheck, `pnpm check` (482 tests) and manual browser acceptance passed. Fixes made during verification: restored missing `packages/shared` files; seven `react-hooks/set-state-in-effect` lint errors in the web app; matrix test override target; boundaries test timeout. D48–D53 accepted by the owner the same day; Phase 3 final acceptance pending. |
 | 2026-11-15 | Owner reports that the Phase 2 GitHub Actions CI run, previously deferred, was run and passed. The run's date and commit are not recorded here. |
 | 2026-11-13 | Owner verification of Phase 2 completed locally: migrations/drift check, lint/format/typecheck, 228 tests (20 s timeout), manual browser acceptance, Docker app images/startup and API readiness passed; current-session indicator fixed. D41–D47 accepted. Phase 2 GitHub Actions CI explicitly deferred/not run at that time (later run and passed, see the 2026-11-15 entry below); final sign-off pending (§7.9). |
+| 2026-11-15 | Phase 4 (rich-text editor) implemented and tested in a preparation environment with PostgreSQL 16/Redis 7 (692 tests passed); interim content persistence and local-disk image storage chosen under the owner's "do what is best for now" (D54–D56 proposed). Migration drift check, browser, Docker and CI not run. Awaiting owner verification (§9). |
+| 2026-11-16 | Owner verification of Phase 4 completed locally (§9.11): `migrate deploy`/`status` and scratch-database drift check passed; lint, format and typecheck passed; 692 tests passed with `--testTimeout=20000`; browser walkthrough passed. Fixes during verification: Tiptap dependencies added to `packages/editor/package.json` and `apps/web/package.json` (missing from the delivered tree) and the lockfile updated; the editor tsconfig change from the delivery was applied. D54–D56 accepted. |
 
 ## 7. Phase 2 – implementation and verification record (2026-11-13)
 
@@ -672,3 +676,139 @@ feat: Phase 3 workspaces, pages and permissions
 Verified locally: pnpm check passes (482 tests); migration drift check and manual
 browser acceptance passed (see docs/HANDOVER.md section 8.8).
 ```
+
+## 9. Phase 4 – implementation record (2026-11-15)
+
+**§9.1–§9.10 below were produced in a preparation environment (Node 24.18.0, pnpm 12.18.0, PostgreSQL 16.15, Redis 7.0.15; no browser, no Docker, no Prisma schema engine) and are kept as delivered. The owner ran the delivery locally on 2026-11-16; the results, and where they supersede §9.3, §9.4, §9.6 and §9.8, are in §9.11.**
+
+### 9.1 Conflicts with the plan and the decisions taken
+
+The Phase 4 task asked for document loading, saving, autosave and "validate persisted content", and for "image support". `IMPLEMENTATION_PLAN.md` lists persistence and autosave as out of scope for Phase 4 (Phase 6), D15 makes persistence Yjs-based, and the plan defines image support as upload to object storage (MinIO or alternative, U7). `CLAUDE.md` requires such conflicts to be raised, not settled silently; they were put to the owner, who answered **"do what is best for now"** to both. The resulting choices were proposed on 2026-11-15 and **approved by the owner on 2026-11-16**:
+
+| Decision | Choice | Cost |
+|---|---|---|
+| **D54** | Interim persistence: validated ProseMirror JSON in a separate `page_contents` table, revision compare-and-set, `CONTENT-01/02`, autosave in the web client. Removed in Phase 6. | A second source of truth until Phase 6; no merge, only conflicts. |
+| **D55** | Image upload flow, 5 MiB limit, PNG/JPEG/GIF/WebP, behind a storage adapter with a **local-disk backend**. | S3/MinIO adapter, MinIO in Compose and avatar upload are **not** done; single-instance only. |
+| **D56** | Document schema v1, one definition in `packages/shared`, Tiptap 3.33.1, unapproved StarterKit nodes disabled. | Pasted blockquotes/code/strikethrough are dropped. |
+
+Had D54 been rejected, that would have meant removing `page_contents`, `CONTENT-01/02`, `savePageContent` and the autosave wiring (the editor, validator and images remain).
+
+### 9.2 What was implemented
+
+- **Shared** (`packages/shared`): `editor-content.ts` (schema v1, `validateEditorDocument`, link helpers, limits), `page-content.ts` (CONTENT schemas), `assets.ts` (types, limit, signature detection, asset schemas); `ASSET_STORAGE_DIR` in the API environment schema.
+- **Database** (`packages/db`): models `PageContent`, `Asset`, enums `AssetPurpose`, `AssetStatus`; migration `20261115120000_editor_content_assets` (hand-written SQL, CHECKs).
+- **Editor** (`packages/editor`): `ExtensionRegistry` and default features, configured extensions, slash commands and the `SlashCommand` extension, type re-exports.
+- **API** (`apps/api`): `routes/page-content.ts` (CONTENT-01/02), `routes/assets.ts` (ASSET-01…04), `storage/` (adapter interface, local-disk adapter), `jobs/asset-cleanup.ts` (hourly), a per-route 1 MiB body limit for CONTENT-02, two rate-limit rules, and a narrow content-type exemption for ASSET-04 in `plugins/security.ts`.
+- **Web** (`apps/web`): `components/editor/` (editor, toolbar, slash menu, save indicator, save-error classification), `lib/autosave.ts`, `lib/image-upload.ts`, API client calls, editor styles in `globals.css`, `PageView` now renders the editor (the placeholder is gone).
+- **Documentation:** DECISIONS (D54–D56, U7, D20 note), API_CONTRACTS (§7.1, §9), DATABASE_SCHEMA §13, ARCHITECTURE §21, TESTING §8.0c, IMPLEMENTATION_PLAN (Phase 4 status), DEPLOYMENT, PROJECT_MASTER and README status, `.env.example`, `.gitignore`, this file.
+
+### 9.3 Acceptance criteria (IMPLEMENTATION_PLAN, Phase 4)
+
+| AC | Status | Evidence / gap |
+|---|---|---|
+| 4.1 | **Partial** | Component or unit test for each of FR-ED-01…08 (editor-behavior, page-editor tests) — pass. **No E2E tests through a real browser** (Playwright unavailable). Owner's manual browser walkthrough of every feature passed 2026-11-16 (§9.11); still no automated E2E. |
+| 4.2 | Pass | `registry.test.ts` registers a custom mark and slash command without touching core code. |
+| 4.3 | **Partial** | Authorize → upload → complete → read round trip passes in API tests and in the live smoke test (2 MB through the proxy, identical hash); users without access get 404/401. **Against the local-disk adapter, not object storage.** No E2E. Owner confirmed button, paste and drag-and-drop uploads, reload persistence and rejections in a browser 2026-11-16; still the local-disk adapter. |
+| 4.4 | Pass | 415 (type, SVG), 413 (size), 409 (missing object, size mismatch, wrong signature) in `assets.int.test.ts`. |
+| 4.5 | **Partial** | Toolbar (one tab stop, arrows/Home/End) and slash menu (arrows, Enter, Escape) are tested with keyboard events in jsdom; no E2E keyboard test, no screen-reader check. Owner's manual keyboard-only check passed 2026-11-16; still no automated E2E or screen-reader check. |
+| 4.6 | Pass | `createDefaultRegistry({ undoRedo: false })` removes the built-in extension (headless editor test). |
+| 4.7 | **Partial** | Flow, limits and types recorded (D55, U7 partly resolved); production storage backend and MinIO check open. D55 accepted 2026-11-16; production backend (U7) still open. |
+| Task: viewer permissions prevent editing | Pass | Read-only editor, no toolbar, no autosave client-side; server answers 403/404 (permission-matrix style tests in `page-content.int.test.ts`). |
+| Task: responsive | **Manually verified** | CSS written for narrow screens (scrollable toolbar and tables, 44 px touch targets); never rendered in a browser. Owner checked phone width in a browser 2026-11-16: passed. |
+| FR-AUTH-05 avatar upload | **Not done** | Deferred (D55); `USER-02 avatarAssetId` not implemented. |
+
+### 9.4 What was and was not executed
+
+Executed: `pnpm install --frozen-lockfile` (plus the new Tiptap packages), Prisma `validate` and client generation, the new migration (applied with psql through a script that also fills `_prisma_migrations`, because Prisma's schema engine could not be downloaded), `pnpm lint` (no problems), `pnpm typecheck`, `pnpm build` (packages, API, collab, web), `pnpm test --testTimeout=20000`: **38 files, 692 tests passed** (baseline in the same environment: 27 files, 482 tests, matching your Phase 3 result), and a smoke test against the built API and web servers (§TESTING 8.0c).
+
+Not executed: `prisma migrate deploy`/`status` and the scratch-database drift check for the new migration; `pnpm format:check` clean (see 9.6); any browser or Playwright test; Docker images and Compose; GitHub Actions; PostgreSQL 17 (16.15 was used); S3/MinIO.
+
+### 9.5 Deviations from the design documents
+
+1. Interim `CONTENT-01/02` and `page_contents` (not in the design; D54). 2. `ASSET-04` added; `ASSET-03` streams instead of redirecting (local adapter); `filename` removed from `ASSET-01`; `AVATAR` not accepted. 3. `User.avatarAssetId` not created. 4. `Asset.createdAt` is set by the application clock. 5. The JSON-only rule of D25 has one route-scoped exception (ASSET-04). 6. Table cells forbid nested tables (a tightening of Tiptap's default).
+
+### 9.6 Findings and risks to check first
+
+1. **Pre-existing lint errors:** five Phase 3 route files (`activity`, `invitations`, `page-permissions`, `pages`, `workspaces`) imported `AccessService` as a value although it is only used as a type (`@typescript-eslint/consistent-type-imports`). They are byte-identical to the uploaded zip. I applied the one-line autofix (`import { type AccessService }`) so lint is clean; if your lint was clean before, something else differs and you should check.
+2. **Pre-existing Prettier drift:** `prettier --check .` flags 19 Phase 3 files that I did not touch (lines over 100 columns, for example `packages/shared/src/workspaces.ts`) and 5 files I modified that were already unformatted (`routes/invitations.ts`, `routes/page-permissions.ts`, `routes/pages.ts`, `routes/workspaces.ts`, `lib/api-client.ts`). All 25 files I created or modified that were clean before are formatted. I did not reformat other people's files to keep this change reviewable; run `pnpm format` as a separate commit if you want a clean `format:check`.
+3. **Zod 4 encodes responses:** a `.transform` in a response schema fails at serialization ("unidirectional transform"). The document schema is therefore a refinement cast to its type. Keep this in mind for any shared schema used in a response.
+4. **Table command chains:** chaining `addRowAfter` and `addColumnAfter` in one Tiptap command duplicated the table (jsdom); the toolbar issues one command per click.
+5. **Migration drift is unchecked:** the SQL follows Prisma's conventions and applied cleanly, but only your `migrate:dev` scratch-database check can prove the schema and migration agree.
+6. **PostgreSQL 16 vs 17** and an Ubuntu-packaged Redis were used for the tests.
+
+### 9.7 Known limitations
+
+No real-time collaboration (two editors get a conflict choice, not a merge); retries are lost if the tab is closed while offline (the browser asks before closing) and when navigating inside the app while offline; no history; image `alt` defaults to the file name and cannot be edited; images use `Cache-Control: no-store`; images removed from a document stay on disk; local-disk storage serves a single API instance and the Docker `apps` profile has no volume for it; the slash menu hides on Escape but reappears when typing continues; image width/height are not set by the UI; mobile soft-keyboard and IME behaviour untested; the upload request is not resumable.
+
+### 9.8 Owner verification checklist
+
+1. `pnpm install`, `pnpm db:generate`, **`pnpm db:migrate:deploy`**, `pnpm db:migrate:status`, then the **scratch-database drift check** (`migrate:dev` against an empty database) — expect no drift for `20261115120000_editor_content_assets`.
+2. `pnpm check` (lint, format check — see 9.6 — typecheck, tests). Expect 692 tests.
+3. Browser walkthrough with two roles: open a page (empty editor), type, wait for "Saved", reload (content returns); use each toolbar control and each slash command (`/`, type, Enter); insert an image by button, paste and drag-and-drop; open the same page in two tabs, edit in both and check the conflict message and both choices; sign in as a Viewer (read-only, no toolbar) and as a Commenter; go offline (retry message), come back online; narrow the window to phone width (toolbar scrolls, tables scroll, nothing overflows); keyboard only (Tab to the toolbar, arrows between buttons, `/` menu with arrows and Enter).
+4. Decide D54, D55, D56 and U7 (production storage backend, MinIO).
+5. Optionally: Docker `apps` profile (images need a volume for `ASSET_STORAGE_DIR`), GitHub Actions.
+
+### 9.9 Notes for Phase 5
+
+Seed each `Y.Doc` from `page_contents.content` for pages without document state (Tiptap's Collaboration uses a ProseMirror schema; this document format is valid for it); build the editor with `createDefaultRegistry({ undoRedo: false })` plus the Collaboration extension; drop `page_contents`, `CONTENT-01/02`, `savePageContent` and the autosave HTTP save in Phase 6; keep `validateEditorDocument` for imports and for any server-side content writes; check which Yjs binding package Tiptap 3.33.1 requires (D20).
+
+### 9.10 Suggested commit message
+
+```
+feat: Phase 4 rich-text editor with interim autosave and image upload
+
+- Tiptap 3.33.1 editor (headings, bold/italic/underline, lists, checklists,
+  links, tables, text alignment, images, slash commands, toolbar) built from an
+  extension registry; undo/redo can be removed for the Yjs binding
+- shared document schema v1 and validator (D56) used by the API and checked
+  against the real ProseMirror schema
+- interim page-content API CONTENT-01/02 with revision compare-and-set and
+  client autosave (D54; replaced by the Yjs document store in Phase 6)
+- image upload ASSET-01..04 behind a storage adapter, local-disk backend,
+  type/size/signature checks, hourly cleanup job (D55)
+- viewers get a read-only editor; server enforces PAGE>=EDITOR for writes
+- migration 20261115120000_editor_content_assets (page_contents, assets)
+- tests: 692 passing (210 new); docs and HANDOVER updated
+- lint: add `type` to AccessService imports in five Phase 3 route files
+- deps: declare @tiptap/* 3.33.1 and @floating-ui/dom in packages/editor and
+  apps/web; update pnpm-lock.yaml
+- docs: D54-D56 accepted; Phase 4 owner verification recorded (section 9.11)
+
+Verified locally: db:migrate:deploy and the drift check are clean, pnpm test
+--testTimeout=20000 passes (692 tests) and the browser walkthrough passed (see
+docs/HANDOVER.md section 9.11).
+```
+
+
+### 9.11 Owner verification results (2026-11-16)
+
+Run locally by the owner (Windows, Git Bash, Node 24.18.0, pnpm 12.18.0, PostgreSQL 17 on host port 5433, Redis 7) following §9.8.
+
+| Check | Result | Notes |
+|---|---|---|
+| `pnpm install`, `pnpm db:generate` | **Passed** | After the delivery gaps below were closed; the first `pnpm install` was a no-op because the Tiptap dependencies were not declared |
+| `pnpm db:migrate:deploy` / `migrate:status` | **Passed** | Prisma applied `20261115120000_editor_content_assets`; status "up to date"; a second `deploy` found nothing pending |
+| Scratch-database drift check | **Passed** | All four migrations applied to an empty `conote_scratch`; second `migrate:dev` reported "Already in sync"; no new migration proposed; `git status` showed only the expected Phase 4 changes |
+| `pnpm lint`, `pnpm format:check` | **Passed** | `format:check` reported all files formatted, so the Prettier drift predicted in §9.6 item 2 did not appear in the owner's tree |
+| `pnpm typecheck` | **Passed** | After the delivery gaps below were closed |
+| `pnpm test` (default 5 s timeout) | **690 / 692** | The two `tests/startup.test.ts` cases (api and collab exit-code tests) timed out at 5 s; the same borderline spawn-heavy timeout is recorded for Phase 2 (§7.9 finding 2). Total 139 s with 38 workers |
+| `pnpm test --testTimeout=20000` | **Passed: 38 files, 692 tests** | Matches the preparation-environment count (482 baseline + 210) |
+| Browser walkthrough (§9.8 item 3) | **Passed** | Owner reported all of it working: empty editor, typing, "Saved", reload persistence; every toolbar control and slash command; images by button, paste and drag-and-drop; two-tab conflict with both choices; Viewer, Commenter and Editor roles; offline retry and recovery; phone-width layout; keyboard-only operation |
+| D54, D55, D56 | **Accepted** | Owner approval 2026-11-16; U7 (production storage backend, MinIO) remains open |
+
+**Delivery gaps found and fixed during verification** (no application behaviour was changed):
+
+1. `packages/editor/package.json` and `apps/web/package.json` did not declare the Tiptap dependencies, and `pnpm-lock.yaml` had no Tiptap entries, so `packages/editor` could not resolve any `@tiptap/*` module. The owner added the dependencies (`packages/editor`: `@tiptap/core`, `extension-image`, `extension-list`, `extension-table`, `extension-text-align`, `extensions`, `pm`, `starter-kit`, `suggestion` at 3.33.1 and `@floating-ui/dom` 1.8.0; `apps/web`: `@tiptap/core`, `pm`, `react` at 3.33.1 and `@floating-ui/dom` 1.8.0); `pnpm install` then added 55 packages and updated the lockfile. These two `package.json` files and `pnpm-lock.yaml` must be in the Phase 4 commit.
+2. The editor tsconfig change from the delivery had not been copied into the owner's tree; the `Cannot find name 'document'` errors in `packages/editor` disappeared once it was applied. `packages/editor/tsconfig.build.json` still compiles the test files into `dist` (unlike `packages/shared`, which excludes `src/**/*.test.ts`); excluding them is optional cleanup.
+
+**Findings**
+
+- Use `pnpm test --testTimeout=20000` for the full suite on this machine; whether to raise the default timeout for spawn-heavy tests in the repository is still undecided (§7.9).
+- The responsiveness and keyboard rows in §9.3 are now covered by the owner's manual checks; they are not automated tests, and screen-reader, soft-keyboard and IME behaviour remain unchecked.
+
+**Still open**
+
+- Final owner acceptance of Phase 4, Phase 3 and the Phase 2 sign-off.
+- U7: production storage backend (S3-compatible adapter, MinIO and its licensing check, avatar upload / `USER-02 avatarAssetId`).
+- Docker `apps` profile (needs a volume for `ASSET_STORAGE_DIR`) and GitHub Actions for Phases 3 and 4.
+- Known limitations in §9.7 stand unchanged.

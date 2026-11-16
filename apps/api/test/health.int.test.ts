@@ -14,7 +14,14 @@ const logger = pino({ level: 'silent' });
 let app: ReturnType<typeof buildApp> | undefined;
 
 function make(env: { DATABASE_URL: string; REDIS_URL: string }) {
-  app = buildApp({ logger, dependencies: createDependencies(env, logger), config: testConfig() });
+  app = buildApp({
+    logger,
+    dependencies: createDependencies(
+      { ...env, ASSET_STORAGE_DIR: '.data/test-health-assets' },
+      logger,
+    ),
+    config: testConfig(),
+  });
   return app;
 }
 

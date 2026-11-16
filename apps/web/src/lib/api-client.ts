@@ -1,6 +1,9 @@
 import type {
+  AssetDto,
+  AssetUploadTarget,
   AssignableRole,
   ChangePasswordRequest,
+  CreateAssetUploadRequest,
   CreateInvitationRequest,
   CreatePageRequest,
   ErrorCode,
@@ -10,9 +13,12 @@ import type {
   MemberDto,
   MovePageRequest,
   PageAccessRole,
+  PageContentDto,
   PageDto,
   PagePermissionDto,
   RegisterRequest,
+  SavePageContentRequest,
+  SavedPageContentDto,
   SessionInfoDto,
   UpdateProfileRequest,
   UserDto,
@@ -50,16 +56,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+/** Raw bytes instead of JSON; only image upload (ASSET-04) uses it. */
+interface RawUpload {
+  file: Blob;
+  contentType: string;
+}
+
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  upload?: RawUpload,
+): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, {
       method,
       credentials: 'same-origin',
       cache: 'no-store',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      // The API requires a JSON content type on every state-changing request (D25).
-      ...(method === 'GET' ? {} : { body: JSON.stringify(body ?? {}) }),
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': upload?.contentType ?? 'application/json',
+      },
+      // The API requires a JSON content type on every state-changing request (D25); the one
+      // exception is the image upload, which declares the image's own type.
+      ...(method === 'GET' ? {} : { body: upload?.file ?? JSON.stringify(body ?? {}) }),
     });
   } catch {
     throw new ApiError({
@@ -192,6 +213,25 @@ export const api = {
   listTrash: (workspaceId: string) =>
     request<{ pages: PageDto[] }>('GET', `/api/v1/workspaces/${enc(workspaceId)}/trash?limit=100`),
 
+  // ───────────── Page content (interim, D54) and images (D55) ─────────────
+  getPageContent: (pageId: string) =>
+    request<PageContentDto>('GET', `/api/v1/pages/${enc(pageId)}/content`),
+  savePageContent: (pageId: string, input: SavePageContentRequest) =>
+    request<SavedPageContentDto>('PUT', `/api/v1/pages/${enc(pageId)}/content`, input),
+  authorizeImageUpload: (input: CreateAssetUploadRequest) =>
+    request<{ asset: AssetDto; upload: AssetUploadTarget }>(
+      'POST',
+      '/api/v1/assets/uploads',
+      input,
+    ),
+  uploadImageBytes: (target: AssetUploadTarget, file: Blob) =>
+    request<null>(target.method, target.url, undefined, {
+      file,
+      contentType: target.headers['Content-Type'] ?? file.type,
+    }),
+  completeImageUpload: (assetId: string) =>
+    request<{ asset: AssetDto }>('POST', `/api/v1/assets/${enc(assetId)}/complete`),
+
   // ───────────── Page permissions ─────────────
   listPagePermissions: (pageId: string) =>
     request<{
@@ -253,6 +293,8 @@ export function describeApiError(error: unknown): string {
       return 'The workspace owner cannot be removed or demoted. Transfer ownership first.';
     case 'CONFLICT':
       return 'This changed while you were working. Reload and try again.';
+    case 'PAYLOAD_TOO_LARGE':
+      return 'This is too large to save.';
     default:
       return 'Something went wrong. Please try again.';
   }

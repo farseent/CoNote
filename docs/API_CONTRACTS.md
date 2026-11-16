@@ -1,7 +1,7 @@
 # CoNote – REST API Contracts
 
 **Status:** Implemented: operational endpoints `GET /health` and `GET /ready` (Phase 1) and **`AUTH-01`–`AUTH-07` and `USER-01`–`USER-02` (Phase 2; see §3.1 and §4.1 for confirmed behaviour and differences from the design)**. Phase 2 decisions D41–D47 were accepted by the owner on 2026-11-13. **Phase 3 (implemented 2026-11-14; owner-verified locally 2026-11-15; decisions D48–D53 accepted by the owner on 2026-11-15): `WS-01`–`WS-09`, `INV-01`–`INV-07` (INV-07 is new), `PAGE-01`–`PAGE-09`, `PP-01`–`PP-03`, `ACT-01`–`ACT-02`; see §15 for the implemented behaviour and differences from the design.** All other endpoints (`PAGE-10`, comments, versions, assets, collaboration) remain design-only and are not implemented.
-**Last updated:** 2026-11-15
+**Last updated:** 2026-11-16
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md). Models are in [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md). Collaboration traffic (Yjs sync, awareness, application events, version create/restore) is **not** REST; see [WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md).
 
@@ -303,6 +303,23 @@ Invitation links have the form `<APP_URL>/invite#token=<token>`; the token is in
 - **Notes:** the token is an EdDSA JWT with a 60-second lifetime (D22). `role` and `readOnly` are advisory for the UI; the collab server decides from the database.
 - **Errors:** `404` (also for deleted pages), `429`.
 
+### 7.1 Interim page-content endpoints (`CONTENT`, Phase 4, D54)
+
+> Interim: these two endpoints exist only until Phase 6 replaces document persistence with the Yjs document store (D15). Nothing else may depend on them. Not part of the original design; recorded as D54 (accepted 2026-11-16).
+
+#### CONTENT-01 `GET /api/v1/pages/:pageId/content`
+- **Auth:** Session. **Authz:** `PAGE≥VIEWER` (`404` when the page does not exist, is in the trash, or the caller has no access).
+- **Response `200`:** `{ "content": Document | null, "schemaVersion": 1, "revision": integer, "updatedAt": string | null }`. A page that was never edited returns `content: null`, `revision: 0`, `updatedAt: null`. `Document` is the editor's ProseMirror JSON (D56). Stored content is validated again before it is returned; a stored document that no longer satisfies the format is `500 INTERNAL_ERROR`.
+- **Errors:** `400` (malformed id), `401`, `404`.
+
+#### CONTENT-02 `PUT /api/v1/pages/:pageId/content`
+- **Auth:** Session. **Authz:** `PAGE≥EDITOR` (`403` for viewers and commenters; `404` when the page is not visible). **Rate limited** (`contentSave`, 240 per minute per client address).
+- **Request:** `{ "baseRevision": integer ≥ 0, "content": Document }`. Unknown fields are rejected. The request body limit of this route is 1 MiB + 4 KiB (the API default of 64 KiB applies everywhere else).
+- **Validation:** `content` must satisfy `validateEditorDocument` in `packages/shared`: at most 1 MiB serialized, 20 000 nodes and depth 24; only the node types, marks and attributes of schema version 1; content rules per node; link targets `http`, `https`, `mailto`; image sources only of the form `/api/v1/assets/<uuid>`. `400 VALIDATION_ERROR` with `details[].path` such as `content.content.1.attrs.level` (the message never contains document text).
+- **Concurrency:** compare-and-set on the revision. `baseRevision: 0` creates the first revision, any other value updates only if the stored revision equals it. Otherwise `409 CONFLICT`. Of two simultaneous saves based on the same revision exactly one succeeds.
+- **Response `200`:** `{ "revision": integer, "updatedAt": string }` (revision = `baseRevision + 1`). The page's `updatedAt` is set to the same time.
+- **Errors:** `400`, `401`, `403`, `404`, `409`, `413` (body over the limit), `415`, `429`.
+
 ## 8. Page permissions (`PP`)
 
 Overrides follow D23. Changes publish `page.access_changed` access events (D22).
@@ -323,24 +340,30 @@ Overrides follow D23. Changes publish `page.access_changed` access events (D22).
 
 ## 9. Assets (`ASSET`)
 
-Upload flow (design pending U7; limits and allowed types are fixed in Phase 4): authorize → upload directly to object storage with a presigned URL → confirm.
+Upload flow (U7 partly resolved, D55 accepted 2026-11-16): authorize → send the bytes → confirm → read. Phase 4 implements `PAGE_IMAGE` assets and a local-disk storage adapter; the object-storage (presigned) variant and avatars are not implemented. Allowed types: `image/png`, `image/jpeg`, `image/gif`, `image/webp` (no SVG). Limit: 5 MiB. Documents reference an image only by `/api/v1/assets/<assetId>`.
 
 ### ASSET-01 `POST /api/v1/assets/uploads`
-- **Auth:** Session. **Rate limited (strict).**
-- **Request:** `{ "purpose": "PAGE_IMAGE"|"AVATAR", "pageId"?: uuid /* required for PAGE_IMAGE */, "filename": string, "contentType": string, "sizeBytes": integer }`
-- **Authz:** `PAGE_IMAGE`: `PAGE≥EDITOR` on the page. `AVATAR`: any authenticated user (own avatar).
-- **Validation:** `contentType` in the configured allow-list of image types; `sizeBytes` within the configured limit (`413 PAYLOAD_TOO_LARGE`); storage key generated server-side (client filename is never used as the key).
-- **Response `201`:** `{ "asset": Asset /* status PENDING */, "upload": { "url": string, "method": "PUT", "headers": { }, "expiresAt": string } }`.
-- **Errors:** `400`, `403`, `404`, `413`, `415`, `429`.
+- **Auth:** Session. **Rate limited** (`assetUpload`, 120 per 15 minutes per client address).
+- **Request:** `{ "purpose": "PAGE_IMAGE", "pageId": uuid, "contentType": string, "sizeBytes": integer ≥ 1 }`. `purpose: "AVATAR"` is not accepted yet (`400`). *Deviation from the design: `filename` was dropped; the server never uses it and nothing stores it.*
+- **Authz:** `PAGE≥EDITOR` on the page (`403`; `404` when the page is not visible or in the trash).
+- **Validation:** `contentType` must be in the allow-list (`415 UNSUPPORTED_MEDIA_TYPE`); `sizeBytes` ≤ 5 MiB (`413 PAYLOAD_TOO_LARGE`). The storage key `<workspaceId>/<assetId>` is generated server-side.
+- **Response `201`:** `{ "asset": Asset /* status PENDING, url */, "upload": { "url": string, "method": "PUT", "headers": { "Content-Type": string }, "expiresAt": string } }`. The authorization is valid for 10 minutes.
+- **Errors:** `400`, `401`, `403`, `404`, `413`, `415`, `429`.
+
+### ASSET-04 `PUT /api/v1/assets/:assetId/content` (local-disk adapter only; added in Phase 4)
+- **Auth:** Session. **Authz:** the uploader, still `PAGE≥EDITOR` on the page (`404` for anyone else, `403` if the right was lost). Answers `404` when the configured adapter does not receive uploads through the API.
+- **Request:** the raw image bytes with the announced `Content-Type`. **This is the one state-changing route that does not take JSON**: the JSON content-type rule (D25) is waived for `PUT /api/v1/assets/<uuid>/content` with the four image types only; the Origin check still applies and every other route still answers `415`. Body limit 5 MiB (`413`).
+- **Response `200`:** `{ "success": true, "data": null }`. **Errors:** `401`, `403`, `404`, `409` (already confirmed, or authorization expired), `413`, `415` (type differs from the authorization).
 
 ### ASSET-02 `POST /api/v1/assets/:assetId/complete`
-- **Auth:** Session. **Authz:** the uploader. The API verifies that the object exists and that its size and type match; sets status `READY`.
-- **Response `200`:** `{ "asset": Asset }`. **Errors:** `404`, `409` (object missing or mismatched).
+- **Auth:** Session. **Authz:** the uploader with `PAGE≥EDITOR` (`404` otherwise). Idempotent for an asset that is already `READY`.
+- **Checks:** the object exists, its size equals the announced size, and its leading bytes are the announced image type. A failed check deletes the object and answers `409 CONFLICT`; the asset stays `PENDING`.
+- **Response `200`:** `{ "asset": Asset /* READY */ }`. **Errors:** `401`, `403`, `404`, `409`.
 
 ### ASSET-03 `GET /api/v1/assets/:assetId`
-- **Auth:** Session. **Authz:** `PAGE_IMAGE`: `PAGE≥VIEWER` on the asset's page; `AVATAR`: any authenticated user.
-- **Response `302`:** redirect to a short-lived presigned read URL. Because the stable URL is same-origin, `<img>` requests carry the session cookie. Images referenced in documents use this stable URL, never a storage URL.
-- **Errors:** `401`, `404`.
+- **Auth:** Session. **Authz:** `PAGE≥VIEWER` on the asset's page (`404` for everyone else, for assets that are not `READY` and for pages in the trash).
+- **Response `200` (local-disk adapter):** the image bytes with the stored `Content-Type`, `Content-Disposition: inline` and `X-Content-Type-Options: nosniff`. (An S3-compatible adapter would answer `302` to a short-lived presigned URL.) Like all `/api/` responses it carries `Cache-Control: no-store`. The stable URL is same-origin, so `<img>` requests carry the session cookie.
+- **Errors:** `400`, `401`, `404`.
 
 ## 10. Comments (`CMT`)
 

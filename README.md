@@ -1,6 +1,6 @@
 # CoNote – Real-Time Collaborative Workspace
 
-> **Project status: Phase 1 (infrastructure) and Phase 2 (authentication and user management) are implemented; Phase 2 is awaiting owner verification.** You can register, sign in, sign out, edit your profile, change your password and manage your signed-in sessions. **No other product feature (workspaces, pages, editor, collaboration, comments, versions) is implemented yet**; everything under "Planned features" is the *plan*. Current status: `docs/HANDOVER.md`.
+> **Project status: Phases 1–3 are implemented and owner-verified locally; Phase 4 (single-user rich-text editor) is implemented and awaiting owner verification.** You can register, manage workspaces, members, invitations and nested pages with permissions, and edit a page's content in a rich-text editor (headings, formatting, lists, checklists, links, tables, images, alignment, slash commands) with autosave. **Real-time collaboration, presence, comments and version history are not implemented**; everything under "Planned features" is the *plan*. Phase 4 saves content with an interim mechanism that Phase 6 replaces (`docs/DECISIONS.md` D54). Current status: `docs/HANDOVER.md`.
 
 CoNote is a collaborative workspace inspired by Notion and Figma. Multiple people will be able to edit the same rich-text page at the same time, see each other's cursors and presence, discuss content in comment threads, and browse or restore earlier versions, without losing concurrent changes.
 
@@ -99,9 +99,9 @@ Credentials in `.env.example` are local development defaults only. Never commit 
 |---|---|---|
 | 0 | Documentation and Architecture | Documentation written |
 | 1 | Project Setup and Infrastructure (including a disposable collaboration spike) | Infrastructure done; collaboration spike not done (D33) |
-| 2 | Authentication and User Management | Not started |
-| 3 | Workspaces, Pages and Permissions | Not started |
-| 4 | Rich-Text Editor | Not started |
+| 2 | Authentication and User Management | Implemented, owner-verified locally |
+| 3 | Workspaces, Pages and Permissions | Implemented, owner-verified locally; final acceptance pending |
+| 4 | Rich-Text Editor | Implemented (interim persistence; local-disk image storage); awaiting owner verification |
 | 5 | Yjs CRDT Integration | Not started |
 | 6 | WebSocket Server and Real-Time Collaboration | Not started |
 | 7 | Presence and Collaborative UI | Not started |
