@@ -1,14 +1,16 @@
 # CoNote – Handover
 
-**Last updated:** 2026-11-16 (Phase 5 implemented, executed in a preparation environment and verified on the owner's machine; D57 accepted; Phase 4 accepted by the owner on 2026-11-16 — the older "final acceptance pending" wording below is superseded)
+**Last updated:** 2026-11-18 (**Phase 6 implemented 2026-11-17, executed in a preparation environment, and verified on the owner's machine on 2026-11-18 (§11.11): install, lint, format check, typecheck, 878 tests and a manual real-browser walkthrough passed; D58–D60 accepted**). Earlier: 2026-11-17 (Phase 6 implemented and executed in a preparation environment only); 2026-11-16 (Phase 5 implemented, executed in a preparation environment and verified on the owner's machine; D57 accepted; Phase 4 accepted by the owner on 2026-11-16 — the older "final acceptance pending" wording below is superseded)
 
-**Current phase: Phase 5 – Yjs CRDT Integration. Implemented, executed in a preparation environment (§10.8: 802 tests, defects fixed) and verified on the owner's machine on 2026-11-16 (§10.9): install, Prisma migrate deploy/status and drift check, lint, format check, typecheck, 802 tests on Node 24.18.0 and PostgreSQL 17, and a real SIGKILL restart check all passed. D57 accepted on 2026-11-16. Phase 5 is a library and database phase: the web editor still uses the interim autosave (D54) and there is no provider, server or browser collaboration until Phase 6. Not done: final Phase 5 acceptance, Docker, GitHub Actions.**
+**Current phase: Phase 6 – WebSocket Server and Real-Time Collaboration. Implemented and executed in a preparation environment on 2026-11-17 (§11.8: 878 tests passing there) and verified on the owner's machine on 2026-11-18 (§11.11): install, migrate status, lint, format check, typecheck, 878 tests on Node 24.18.0 and PostgreSQL 17, and a manual walkthrough in real browsers (live editing, read-only and revoked access, collab restart, browser offline, a Phase 4 page, a two-minute idle). One problem was found: two superseded Phase 1 collab test files had not been deleted and broke typecheck until they were. D58–D60 accepted on 2026-11-18. Not done: final Phase 6 acceptance, Docker, GitHub Actions, load and multi-instance tests. Stop after Phase 6 as instructed.** The Phase 5 status follows: **Phase 5 – Yjs CRDT Integration. Implemented, executed in a preparation environment (§10.8: 802 tests, defects fixed) and verified on the owner's machine on 2026-11-16 (§10.9): install, Prisma migrate deploy/status and drift check, lint, format check, typecheck, 802 tests on Node 24.18.0 and PostgreSQL 17, and a real SIGKILL restart check all passed. D57 accepted on 2026-11-16. Phase 5 is a library and database phase: the web editor still uses the interim autosave (D54) and there is no provider, server or browser collaboration until Phase 6. Not done: final Phase 5 acceptance, Docker, GitHub Actions.**
 
 **Current phase:** Phase 4 – Rich-Text Editor. **Implemented on 2026-11-15; owner-verified locally on 2026-11-16 (§9.11); D54–D56 accepted on 2026-11-16; final Phase 4 acceptance is pending.** The Phase 4 task was issued while final Phase 3 acceptance was still pending; as with Phases 2 and 3, that instruction was treated as approval to start. The task conflicted with the approved plan in two places (persistence/autosave and image storage); the owner answered "do what is best for now", the choices were recorded as proposed decisions D54–D56 and the owner approved them on 2026-11-16. The implementation was first built in a preparation environment (lint, typecheck, build and 692 tests passed against PostgreSQL 16 and Redis 7); the owner then ran Prisma `migrate deploy` and the scratch-database drift check, `pnpm check` (692 tests) and a full browser walkthrough locally (§9.11). **Not executed:** Docker (the `apps` profile needs a volume for `ASSET_STORAGE_DIR`), GitHub Actions, S3/MinIO, Playwright.
 
 **Phase 3 status carried forward:** implemented and owner-verified locally on 2026-11-15 (§8.8); D48–D53 accepted; **final Phase 3 acceptance, GitHub Actions CI and the Docker `apps` profile check are still open.** Phase 2: owner-verified locally, CI reported passing, final sign-off never recorded.
 
 **Next step:** the owner records final acceptance of Phase 3 and Phase 4 (and the open Phase 2 sign-off); decides the production storage backend (U7: S3-compatible adapter, MinIO, avatar upload) before deployment; optionally runs the Docker `apps` profile (with a volume for `ASSET_STORAGE_DIR`) and GitHub Actions; then Phase 5 – Yjs CRDT Integration. **(Superseded: Phase 4 was accepted on 2026-11-16, Phase 5 was implemented and verified locally on 2026-11-16, and D57 was accepted. Next: the owner records final Phase 5 acceptance and runs GitHub Actions on the Phase 5 change (new dependencies and lockfile); then Phase 6 – Hocuspocus server and provider, which starts with the `collab → editor` boundary decision, D57 consequence (a).)**
+
+**Next step (current, 2026-11-18):** the owner records final acceptance of Phase 6 (and the earlier open sign-offs); decides what happens to the read-only `page_contents` table (D59 leaves dropping it open); runs the Docker `apps` profile (the collab container needs the new collaboration variables, §11.6) and GitHub Actions on the Phase 6 change (the lockfile was regenerated and has not run on a clean runner); then Phase 7 – Presence and Collaborative UI. The two deleted Phase 1 collab test files must be part of the commit (§11.9).
 
 Read `CLAUDE.md` first. This file is the source of truth for current project status.
 
@@ -20,13 +22,13 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 
 | Repository | pnpm monorepo with `apps/web`, `apps/api`, `apps/collab`, `packages/db`, `packages/shared`, `packages/editor`; root scripts, CI, Dockerfiles and local Compose configuration are present |
 
-| Product features | **Implemented but unverified (Phase 3): workspaces, membership and roles, invitations (link-based), nested pages, soft delete/restore/purge, page-level permissions, activity log, and the web UI for all of these (§8).** **Implemented (Phase 2): registration, login, logout, DB-backed sessions, session list/revoke, password change, profile (display name, presence colour) with web pages.** **Implemented, owner-verified locally 2026-11-16 (Phase 4): single-user rich-text editor (headings, bold/italic/underline, lists, checklists, links, tables, images, alignment, slash commands, toolbar) with interim autosave persistence and image upload (§9).** Not implemented: Yjs/real-time collaboration, presence, comments, version history, avatar upload (still open from Phase 4), email verification, password reset |
+| Product features | **Implemented but unverified (Phase 3): workspaces, membership and roles, invitations (link-based), nested pages, soft delete/restore/purge, page-level permissions, activity log, and the web UI for all of these (§8).** **Implemented (Phase 2): registration, login, logout, DB-backed sessions, session list/revoke, password change, profile (display name, presence colour) with web pages.** **Implemented, owner-verified locally 2026-11-16 (Phase 4): single-user rich-text editor (headings, bold/italic/underline, lists, checklists, links, tables, images, alignment, slash commands, toolbar) with interim autosave persistence and image upload (§9).** **Implemented, owner-verified locally 2026-11-18 (Phase 6): real-time collaborative editing through the Hocuspocus server (live sync, read-only roles, revocation, reconnection); the interim autosave is removed (§11).** Not implemented: presence, comments, version history, avatar upload (still open from Phase 4), email verification, password reset |
 
-| API | Fastify foundation, `/health` and `/ready`, (Phase 2) `AUTH-01`–`AUTH-07`, `USER-01`–`USER-02`, and (Phase 3, unverified) `WS-01`–`WS-09`, `INV-01`–`INV-07`, `PAGE-01`–`PAGE-09`, `PP-01`–`PP-03`, `ACT-01`–`ACT-02` and, (Phase 4, owner-verified locally) interim `CONTENT-01`–`CONTENT-02` and `ASSET-01`–`ASSET-04` under `/api/v1`, with CSRF checks, rate limiting, helmet, CORS, session cleanup job |
+| API | Fastify foundation, `/health` and `/ready`, (Phase 2) `AUTH-01`–`AUTH-07`, `USER-01`–`USER-02`, and (Phase 3, unverified) `WS-01`–`WS-09`, `INV-01`–`INV-07`, `PAGE-01`–`PAGE-09`, `PP-01`–`PP-03`, `ACT-01`–`ACT-02` and, (Phase 4, owner-verified locally) `ASSET-01`–`ASSET-04` (the interim `CONTENT-01`–`CONTENT-02` were removed in Phase 6, D59) and, Phase 6, `PAGE-10` under `/api/v1`, with CSRF checks, rate limiting, helmet, CORS, session cleanup job |
 
-| Collaboration server | Hocuspocus shell and operational endpoints implemented. It deliberately rejects every document connection; this is not a working collaboration service (D38) |
+| Collaboration server | **Phase 6 (2026-11-17; executed in a preparation environment, owner-verified locally 2026-11-18, §11.11):** Hocuspocus server with collaboration-token verification, database-derived roles, read-only enforcement, access events and periodic revalidation, store retry, graceful shutdown and limits; the web editor is connected to it. Single instance, no presence (Phase 7). Before Phase 6 it was a shell that rejected every connection (D38) |
 
-| Database | Prisma 7.10.1; baseline migration, `20261112120000_auth_users_sessions` (`User`, `Session`) and, `20261114090000_workspaces_pages_permissions` (Phase 3 models, hand-written SQL incl. the deferred one-owner trigger). **Phase 4 adds `20261115120000_editor_content_assets` (`page_contents` — interim — and `assets`, hand-written SQL; §9); the owner's `migrate deploy`, `migrate status` and scratch-database drift check were clean on 2026-11-16 (§9.11).** That migration is hand-written SQL. The owner's local `migrate deploy`, `migrate status` and scratch-database `migrate:dev` drift check were clean on 2026-11-13 (§7.9). **Phase 5 adds `20261116120000_yjs_document_store` (`document_states`, `document_updates`; hand-written SQL; §10); the owner's `migrate deploy`, `migrate status` and scratch-database drift check were clean on 2026-11-16 (§10.9).** The web app still persists content only through the interim `page_contents` table (D54); the Yjs `DocumentStore` exists and is tested but nothing in the apps calls it until Phase 6 |
+| Database | Prisma 7.10.1; baseline migration, `20261112120000_auth_users_sessions` (`User`, `Session`) and, `20261114090000_workspaces_pages_permissions` (Phase 3 models, hand-written SQL incl. the deferred one-owner trigger). **Phase 4 adds `20261115120000_editor_content_assets` (`page_contents` — interim — and `assets`, hand-written SQL; §9); the owner's `migrate deploy`, `migrate status` and scratch-database drift check were clean on 2026-11-16 (§9.11).** That migration is hand-written SQL. The owner's local `migrate deploy`, `migrate status` and scratch-database `migrate:dev` drift check were clean on 2026-11-13 (§7.9). **Phase 5 adds `20261116120000_yjs_document_store` (`document_states`, `document_updates`; hand-written SQL; §10); the owner's `migrate deploy`, `migrate status` and scratch-database drift check were clean on 2026-11-16 (§10.9).** The web app still persists content only through the interim `page_contents` table (D54); the Yjs `DocumentStore` exists and is tested but nothing in the apps calls it until Phase 6 **(superseded by Phase 6, D59: the collab server now stores documents through the `DocumentStore`, the HTTP autosave is gone and `page_contents` is a read-only seed source)** |
 
 | Local infrastructure | PostgreSQL 17 and Redis 7 Compose services reported healthy. PostgreSQL host port 5433 maps to container port 5432; Redis host port 6379 |
 
@@ -39,6 +41,8 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 | Phase 2 | Implemented and owner-verified locally. Lint, format check and typecheck passed; 228 tests passed with `--testTimeout=20000`; migration deploy/status and scratch-database drift check passed; browser acceptance checks completed; current-session indicator fixed; Docker app images built and services started; API `/ready` returned HTTP 200 with PostgreSQL and Redis healthy. D41–D47 accepted. GitHub Actions CI for Phase 2 passed (owner-reported; initially deferred). **Final owner sign-off pending.** |
 | Phase 3 | **Implemented 2026-11-14; owner-verified locally 2026-11-15.** Schema validates, client generates, migration deploys and the scratch-database drift check is clean; lint, format check and typecheck pass; `pnpm check` passes with 482 tests (permission matrix 133/133); manual browser walkthrough passed. D48–D53 accepted 2026-11-15. **Not yet done:** final owner acceptance, GitHub Actions CI, Docker `apps` profile check. See §8.8. |
 | Phase 4 | **Implemented 2026-11-15 under the owner's "do what is best for now"; owner-verified locally 2026-11-16.** Migration deploy/status and the scratch-database drift check pass; lint, format check and typecheck pass; 692 tests pass (38 files, with `--testTimeout=20000`); full browser walkthrough passed. D54–D56 accepted 2026-11-16. **Not done:** final owner acceptance, Docker, CI, S3/MinIO storage, avatar upload, automated E2E. See §9 and §9.11. |
+
+| Phase 6 | **Implemented 2026-11-17; owner-verified locally 2026-11-18.** `pnpm install`, `migrate status`, lint, format check and typecheck pass (typecheck only after deleting the two superseded Phase 1 collab test files); 878 tests pass (49 files, `--testTimeout=30000`); manual real-browser walkthrough passed (live editing between two browsers, Viewer and removal while a page is open, collab restart, browser offline, a Phase 4 page, two-minute idle). D58–D60 accepted 2026-11-18. **Not done:** final owner acceptance, Docker, CI, load and multi-instance tests, automated browser E2E. **Not reported:** a third browser, inspection of the collab log, the revocation delay in seconds. See §11 and §11.11. |
 
 ### Decisions and open items
 
@@ -54,6 +58,7 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 
 - **U7 / D37 / D55:** (U7 remains partially resolved.) Object storage/MinIO was omitted from Phase 1 Compose. Phase 4 decided the upload flow, allowed types and size limit and implemented them behind a storage adapter with a **local-disk** backend (D55, accepted 2026-11-16); the S3-compatible adapter, MinIO in Compose, MinIO's licensing check and avatar upload remain open.
 - **D54–D56 (Phase 4):** proposed on 2026-11-15; **accepted by the owner on 2026-11-16.** D54 is an interim second source of truth for page content that Phase 6 removes.
+- **D58–D60 (Phase 6):** proposed on 2026-11-17; **accepted by the owner on 2026-11-18** (§11.11). Open after D59: whether and when to drop the read-only `page_contents` table (needs a migration and an owner decision).
 
 - **U13:** Explicit production recovery after Redis Pub/Sub message loss remains a Phase 9 decision. Redis reconnection alone is not proof of reconvergence.
 
@@ -955,3 +960,145 @@ Not verified: Docker apps profile, GitHub Actions, a single `pnpm check` run.
 | Date | Change |
 |---|---|
 | 2026-11-16 | Phase 5 verified on the owner's machine; no fixes needed; D57 accepted; DECISIONS, TESTING §8.0d and this file updated. |
+
+## 11. Phase 6 – implementation record (2026-11-17)
+
+### 11.1 Scope, and what the task required of the plan
+
+Phase 6 = WebSocket server and real-time collaboration (IMPLEMENTATION_PLAN Phase 6; the task list of 16 items and the "important requirements"). It was written and executed by Claude in a **preparation environment** (Node v22.23.4 with `engine-strict` overridden, PostgreSQL 16 and Redis 7 from apt, `ws` and jsdom for clients, no real browsers, no Docker). **Nothing in this section has been run on the owner's machine.** Three decisions are **proposed and need approval**: D58 (collab may import the editor package), D59 (interim content endpoints removed; `page_contents` kept as a read-only seed source), D60 (Phase 6 server behaviour). The plan's "single instance, no Redis document extension" (D28) was followed; the task did not ask for more.
+
+### 11.2 What was implemented
+
+| Task item | Where |
+|---|---|
+| 1–3 Server, provider, document-specific connections | `apps/collab/src/server.ts` (Hocuspocus hooks), `apps/web/src/lib/collab-session.ts` (HocuspocusProvider, document name `page:<uuid>`) |
+| 4 Authenticate connections | `apps/api/src/auth/collab-tokens.ts` + `routes/collab-token.ts` (`PAGE-10`), `apps/collab/src/token-verifier.ts`; keys: `scripts/generate-collab-keys.mjs` (`pnpm collab:keys` prints a pair) |
+| 5, 13 Workspace/page permissions, no unauthorized subscriptions | `packages/db/src/collab-access.ts` (`resolveCollabAccess`), `apps/collab/src/access-control.ts` |
+| 6–8 Initial sync, broadcast, incoming updates | Hocuspocus sync; seeding in `apps/collab/src/persistence.ts` |
+| 9, 14 Subscription management, cleanup | `apps/collab/src/connection-registry.ts`; `connected` / `onDisconnect` hooks; per-user and total limits |
+| 10–12 Disconnects, reconnection, temporary failures | provider backoff + a fresh token per reconnection; `CollabSession` states; store retry; flush on shutdown |
+| 15 Logging and errors | structured pino logs (user id, page id, role, reason; never tokens or content), refusal reasons, `error` messages |
+| 16 Connect the editor | `apps/web/src/components/editor/page-editor.tsx` (rewritten), `collab-status.tsx`, `use-collab-session.ts` |
+| Permissions over time | `access-events.ts` (Redis), `revalidation.ts` (timer) |
+
+**Removed** (D59): `CONTENT-01/02`, `savePageContent` schemas, the `contentSave` rate limit, `autosave.ts`, `save-errors.ts`, `save-status.tsx` and their tests, and the two Phase 1 shell tests `apps/collab/test/server.test.ts` and `apps/collab/test/server.int.test.ts` (they use the old server API; the owner deleted them on 2026-11-18, §11.11). **Changed:** `packages/shared` (new `collab-protocol.ts`, env schemas), `packages/db` (`collab-access.ts`), ESLint boundary rule and its test, `.env.example`, `scripts/setup.sh`, `tests/startup*.test.ts`.
+
+### 11.3 Acceptance criteria and requirements (results in §11.8)
+
+| Criterion | Result |
+|---|---|
+| Several users open the same page in different browsers and see each other's edits live | **Tested with jsdom editors on the real client code and server**, 2, 3 and 4 clients (`apps/web/test/two-browsers.int.test.ts`); **not tested in a real browser** |
+| State stays consistent after disconnection and reconnection | Tested: single drop, five drops in a row, long absence, server restart, crash |
+| Unauthorized users cannot access or modify documents | Tested: bad/forged/expired tokens, wrong page, no membership, deleted page, `NONE` override, revoked session, foreign origin, pre-authentication frames, read-only roles, revocation while connected |
+| Persistence before durable | Nothing reports durability to clients; stores confirmed by `appendDiff`; flush on shutdown; crash test shows what is and is not recoverable |
+| No unnecessary database writes | Tested: connect/idle/disconnect writes nothing; a 60-keystroke burst makes fewer than 15 rows |
+| No second synchronization mechanism | Interim HTTP save removed; test asserts the editor makes no page-content request |
+| Update the four documents | WEBSOCKET_PROTOCOL §17, ARCHITECTURE §23, TESTING §8.0e, this section; also DECISIONS D58–D60 and API_CONTRACTS |
+
+### 11.4 Findings made while implementing
+
+1. **Hocuspocus 4.8 refusal does not close the socket** (§17.1 of the protocol), and **`Connection.close` closes only the document channel**: a revoked client could keep sending on the same socket for that document. The server closes the socket too and drops any later message of a revoked connection.
+2. **A failed store is not retried by the library**, and a document whose store keeps failing blocks `Server.destroy()` for ever (found by a test whose data was deleted under a running server). Added retries, dropping of documents whose page is gone, and a bounded shutdown.
+3. **A dropped read-only update leaves a gap** in the client's causal history; after an upgrade to editable the client must call `forceSync()`, or its later edits wait for ever (found by a test; now a client rule, D60.4).
+4. **The provider needs `attach()`** when it is given an external socket; `HocuspocusProviderConfiguration` has no `WebSocketPolyfill` type, but the forwarded option works at runtime.
+5. **The delivered `pnpm-lock.yaml` was out of date** (missing the Phase 5 `yjs` entry for `packages/db`), so `pnpm install --frozen-lockfile` failed. The regenerated lockfile is part of this change; check `git diff pnpm-lock.yaml`.
+6. A `.env` key line with an empty value (`COLLAB_JWT_PRIVATE_KEY=`) must mean "not set"; handled.
+
+### 11.5 Known limitations and open items
+
+See WEBSOCKET_PROTOCOL §17.8 (nine items). Most important: no presence (Phase 7); single instance; no offline page loading; idle-connection behaviour with no awareness traffic not observed for more than a few seconds; rate-limit values untuned; **no real-browser test, no load test (PERF/LOAD), no multi-instance test, no Docker/CI run**; `page_contents` still holds Phase 4 data (D59); production CSP and proxy must allow the WebSocket (§17.8.9). **Update 2026-11-18:** on the owner's machine a page left idle for two minutes with no one else on it stayed "Live" (§11.11); real browsers and the owner's platform are now covered for the §11.7 items. Still not covered: load, multi-instance, Docker, CI, a proxy, a CSP, longer idle, laptop sleep.
+
+### 11.6 What the owner must do first
+
+1. Approve or amend **D58, D59, D60**.
+2. `pnpm install` (the lockfile changed), run `node scripts/generate-collab-keys.mjs --write` (it adds the two keys to your existing `.env` only if they are missing and never replaces a key) or re-run `pnpm bootstrap`, **restart the API and the collab server** (new required variables `COLLAB_JWT_PUBLIC_KEYS` for collab; without `COLLAB_JWT_PRIVATE_KEY` the API answers 503 on `PAGE-10`).
+3. Run the checks in §11.7.
+
+**Done on 2026-11-18:** D58–D60 accepted; install, keys, migration status and the §11.7 checks were run (§11.11).
+
+### 11.7 Owner verification checklist
+
+1. `pnpm install`, `pnpm lint`, `pnpm format:check`, `pnpm typecheck`.
+2. `pnpm test --testTimeout=30000`; expected: see §11.8 (the same files; counts may differ by platform).
+3. Start `pnpm dev:api`, `pnpm dev:collab`, `pnpm dev:web`. Open one page in two different browsers (two accounts, both members) and type in both: edits appear in both within a second; the indicator says "Live".
+4. Add a third browser (or a private window) and repeat. Open a second page in another tab: edits do not cross.
+5. Make one account a Viewer (the workspace's Members page): its editor becomes read-only within a few seconds, without reloading; make it an Editor again: editing returns.
+6. Remove that member from the workspace while the page is open: its page shows "Your access to this page has ended" and the other browsers keep working.
+7. Stop the collab server while typing, keep typing for a few seconds, start it again: the indicator goes Offline, then Live; nothing typed is lost and both browsers show the same text. Repeat by turning off the network of one browser (DevTools → Offline).
+8. Open a page that was written in Phase 4 and never opened since: its content appears once.
+9. Leave a page open and idle for two minutes (including with no one else on it): it should stay "Live". If it flaps to Offline and back, report it (limitation §17.8.6).
+10. Try to open a page by its address without access: "do not have access".
+11. Look at the collab log: you should see `connection opened`, `connection closed`, `connection revoked`, and no tokens or document text.
+
+### 11.8 Execution results (preparation environment, 2026-11-17)
+
+| Check | Result |
+|---|---|
+| Baseline (zip as delivered, after regenerating the lockfile and generating the Prisma client) | 43 files, 802 tests passed |
+| `pnpm test --testTimeout=30000` after Phase 6 | **49 files, 878 tests passed** (about 110 s). New or rewritten: collab 62 + 9, API `PAGE-10` 9, web session 20, web editor 34, two-browsers 8, shared 17, boundaries 20, startup 9 |
+| `pnpm lint`, `pnpm typecheck` | clean |
+| `prettier --check .` | clean for every file Phase 6 touched; reports 22 untouched Phase 3 files and `infra/docker-compose.yml` (YAML parse error), as at the start of Phase 6 in this environment (the owner's machine did not show them in Phase 5); left alone on purpose |
+| Repeat runs | collab and web integration suites twice more (79 tests, all passing); the sync suite four more times (13/13) |
+| Flaky tests found | two, both test races, fixed (TESTING §8.0e) |
+| Real process | `apps/collab/src/main.ts` started with generated keys, listened, and stopped on SIGTERM |
+| **Not executed** | real browsers, Docker, CI, the owner's platform, load, multi-instance, idle-for-minutes, a proxy, a production CSP (TESTING §8.0e) |
+
+### 11.9 Suggested commit message
+
+```
+feat: Phase 6 – WebSocket collaboration server and live editing
+
+- collab: Hocuspocus server with EdDSA collaboration-token verification,
+  DB-derived roles on every connection, read-only enforcement, access
+  events + periodic revalidation, store retry, graceful shutdown, limits
+- api: PAGE-10 collab-token endpoint; remove interim CONTENT-01/02 (D59)
+- db: resolveCollabAccess shared role resolution for the collab server
+- web: CollabSession + provider, live TipTap/Yjs editor, status and
+  read-only/revoked handling; remove HTTP autosave
+- shared: collaboration protocol schemas and env settings
+- tooling: collab key generator, boundary rule collab->editor (D58)
+- test: delete the superseded Phase 1 collab shell tests
+  (apps/collab/test/server.test.ts, server.int.test.ts)
+- docs: WEBSOCKET_PROTOCOL §17, ARCHITECTURE §23, TESTING §8.0e,
+  DECISIONS D58-D60, API_CONTRACTS, HANDOVER §11
+```
+
+### 11.10 Change log (Phase 6)
+
+2026-11-17: Phase 6 implemented and executed in a preparation environment; D58–D60 proposed; HANDOVER §11, WEBSOCKET_PROTOCOL §17, ARCHITECTURE §23, TESTING §8.0e, API_CONTRACTS, DECISIONS updated.
+
+2026-11-18: Phase 6 verified on the owner's machine (§11.11): install, migrate status, lint, format check, typecheck (after deleting two superseded Phase 1 collab test files), 878 tests, and a manual real-browser walkthrough passed; D58–D60 accepted; HANDOVER, DECISIONS, TESTING §8.0e, WEBSOCKET_PROTOCOL §17, ARCHITECTURE §23, API_CONTRACTS, IMPLEMENTATION_PLAN and PROJECT_MASTER updated.
+
+### 11.11 Owner verification on the owner's machine (2026-11-18)
+
+**Environment:** Windows (Git Bash), Node v24.18.0, pnpm 12.18.0, PostgreSQL 17 (`postgres:17-alpine`, host port 5433) and Redis 7 (`redis:7-alpine`) from Compose (`docker compose -f infra/docker-compose.yml up -d --wait`), Prisma 7.10.1 (Prisma offered 8.0.0-rc.34; not adopted). The browsers used, their versions, the CPU and the RAM were not recorded.
+
+| Command / check | Result |
+|---|---|
+| Compose services | PostgreSQL and Redis healthy |
+| `pnpm install` | Already up to date (the regenerated lockfile was in place) |
+| Collaboration keys | `.env` held a non-empty `COLLAB_JWT_PRIVATE_KEY` and `COLLAB_JWT_PUBLIC_KEYS` (checked by counting matching lines; the values were not shown) |
+| `pnpm db:migrate:status` | 5 migrations found; schema up to date (Phase 6 adds no migration) |
+| `pnpm lint` | Clean |
+| `pnpm format:check` | Clean; the 22 Phase 3 files and `infra/docker-compose.yml` that the preparation environment reported did not appear |
+| `pnpm typecheck`, first run | **Failed in `apps/collab` with 10 errors, all in `test/server.test.ts` and `test/server.int.test.ts`** (the Phase 1 shell tests): they still used the old server API (`port`, `listen`, `address`, `destroy`, `configuration`, and a `Dependencies` object without `prisma` and `createSubscriber`). The failures reported for `shared`, `api`, `web` and `db` were collateral of `pnpm -r --parallel` stopping. Cause: the Phase 6 delivery said to delete these files and the owner had not yet done so. |
+| `pnpm typecheck`, after deleting those two files | Clean in all projects |
+| `pnpm test --testTimeout=30000` | **49 files, 878 tests passed**; duration 185.56 s (tests 65 %, import 19 %, environment 13 %, transform 3 %) |
+
+**Manual walkthrough in real browsers** (owner-reported as working; no per-step detail, timings or screenshots were recorded). Two accounts in two different browsers, both members of one workspace:
+
+- Edits typed in either browser appeared in the other, simultaneous typing in different places lost nothing and both views ended identical, and the indicator said "Live" (§11.7 items 3 and 4); edits on a second page did not appear on the first.
+- Role change to Viewer: the editor became read-only without a reload, and after changing back to Editor the edits reached the other browser (item 5, including the `forceSync()` case of §11.4 finding 3). Removal from the workspace while the page was open: "Your access to this page has ended" in the removed browser, the other kept working (item 6). Opening the page by its address without access showed the no-access message (item 10).
+- Stopping and restarting the collab server while both browsers typed, and setting one browser Offline in DevTools: the indicator went Offline then Live again, nothing typed was lost and both browsers showed the same text (item 7).
+- A page written in Phase 4 and not opened since appeared once, also after a reload (item 8; D59).
+- A page left idle for two minutes with nobody else on it stayed "Live" (item 9; limitation §17.8.6 did not show up in this single observation).
+
+**Not reported, so not claimed:** a third browser (item 4, optional); inspection of the collab log for item 11; how many seconds the Viewer change and the removal took to appear; the browser names and versions.
+
+**Outcome:** no defect in the Phase 6 code was found; the only failure was the two undeleted Phase 1 test files, a delivery step, not a code change. **D58, D59 and D60 were accepted by the owner on 2026-11-18.**
+
+**Still not verified:** Docker `apps` profile, GitHub Actions (the Phase 5 and Phase 6 lockfile changes have not run on a clean runner), a single `pnpm check` run (the commands were run separately), load and PERF measurements, more than a few concurrent editors in real browsers, two collab instances, a reverse proxy, a production CSP, idle longer than two minutes, laptop sleep, and automated browser E2E (Playwright).
+
+| Date | Change |
+|---|---|
+| 2026-11-18 | Phase 6 verified on the owner's machine; the two superseded Phase 1 collab test files deleted; D58–D60 accepted; documents updated. |

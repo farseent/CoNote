@@ -28,7 +28,7 @@ import { AccessService } from '../workspaces/access.js';
 import { registerActivityRoutes } from './activity.js';
 import { registerAssetRoutes } from './assets.js';
 import { registerInvitationPublicRoutes, registerInvitationRoutes } from './invitations.js';
-import { registerPageContentRoutes } from './page-content.js';
+import { registerCollabTokenRoutes } from './collab-token.js';
 import { registerPagePermissionRoutes } from './page-permissions.js';
 import { registerPageRoutes } from './pages.js';
 import { registerUserRoutes } from './users.js';
@@ -296,8 +296,8 @@ export async function registerAuthRoutes(
     await registerPagePermissionRoutes(guarded, dependencies, config, access);
     await registerActivityRoutes(guarded, dependencies, config, access);
 
-    // ───────────── Phase 4: editor content (interim, D54) and images (D55) ─────────────
-    await registerPageContentRoutes(guarded, dependencies, config, access);
+    // ───────────── Phase 4: images (D55); Phase 6: collaboration tokens (PAGE-10) ─────────────
+    await registerCollabTokenRoutes(guarded, dependencies, config, access);
     await registerAssetRoutes(guarded, dependencies, config, access);
   });
 }

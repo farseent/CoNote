@@ -24,8 +24,8 @@ export interface RateLimits {
   password: RateLimitRule;
   /** Per client IP: invitation preview and accept, which take a bearer token (INV-05, INV-06). */
   invitation: RateLimitRule;
-  /** Per client IP: CONTENT-02, the editor's autosave (D54). */
-  contentSave: RateLimitRule;
+  /** Per client IP: PAGE-10, one collaboration token per connection or reconnection (D22). */
+  collabToken: RateLimitRule;
   /** Per client IP: image upload authorization, upload and completion (ASSET-01, -02, -04; D55). */
   assetUpload: RateLimitRule;
 }
@@ -40,9 +40,9 @@ export const DEFAULT_RATE_LIMITS: RateLimits = {
   loginAccount: { max: 10, timeWindowMs: 15 * MINUTE },
   password: { max: 5, timeWindowMs: 15 * MINUTE },
   invitation: { max: 20, timeWindowMs: 15 * MINUTE },
-  // Autosave sends at most a few requests a minute per open editor; this leaves room for
-  // several tabs and for several people behind one address.
-  contentSave: { max: 240, timeWindowMs: MINUTE },
+  // One token per editor opened and per reconnection (backoff keeps reconnects slow). Strict
+  // compared with `general`, but with room for several tabs and for people behind one address.
+  collabToken: { max: 120, timeWindowMs: MINUTE },
   assetUpload: { max: 120, timeWindowMs: 15 * MINUTE },
 };
 
@@ -60,6 +60,21 @@ export interface ApiConfig {
   rateLimits: RateLimits;
   /** Redis key prefix for rate-limit counters. */
   rateLimitNamespace: string;
+  collab: {
+    /** Signs collaboration tokens (D22); `undefined` leaves PAGE-10 answering 503. */
+    privateKey: CollabPrivateKey | undefined;
+    /** Browser-facing WebSocket URL returned to clients. */
+    url: string;
+  };
+}
+
+/** Ed25519 private key as JWK, with the `kid` that collaboration servers select the public key by. */
+export interface CollabPrivateKey {
+  kty: 'OKP';
+  crv: 'Ed25519';
+  x: string;
+  d: string;
+  kid: string;
 }
 
 export function createApiConfig(
@@ -71,6 +86,8 @@ export function createApiConfig(
     | 'TRUST_PROXY'
     | 'SESSION_IDLE_TTL_DAYS'
     | 'SESSION_ABSOLUTE_TTL_DAYS'
+    | 'COLLAB_JWT_PRIVATE_KEY'
+    | 'COLLAB_URL'
   >,
 ): ApiConfig {
   return {
@@ -84,5 +101,6 @@ export function createApiConfig(
     secureCookies: env.NODE_ENV === 'production',
     rateLimits: DEFAULT_RATE_LIMITS,
     rateLimitNamespace: 'conote:rl:',
+    collab: { privateKey: env.COLLAB_JWT_PRIVATE_KEY, url: env.COLLAB_URL },
   };
 }

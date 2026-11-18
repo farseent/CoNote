@@ -75,12 +75,28 @@ describe('parseEnv', () => {
   });
 
   it('validates collab and web schemas', () => {
+    const publicKey = { kty: 'OKP', crv: 'Ed25519', x: 'AAAA', kid: 'k1' };
     const collab = parseEnv('collab', collabEnvSchema, {
       NODE_ENV: 'production',
       DATABASE_URL: validApi.DATABASE_URL,
       REDIS_URL: validApi.REDIS_URL,
+      APP_URL: 'http://localhost:3000',
+      COLLAB_JWT_PUBLIC_KEYS: JSON.stringify([publicKey]),
     });
     expect(collab.COLLAB_PORT).toBe(4100);
+    expect(collab.COLLAB_ALLOWED_ORIGINS).toEqual(['http://localhost:3000']);
+    expect(collab.COLLAB_JWT_PUBLIC_KEYS).toEqual([publicKey]);
+    expect(collab.COLLAB_STORE_DEBOUNCE_MS).toBe(2000);
+    // The collaboration server never accepts private key material.
+    expect(() =>
+      parseEnv('collab', collabEnvSchema, {
+        NODE_ENV: 'production',
+        DATABASE_URL: validApi.DATABASE_URL,
+        REDIS_URL: validApi.REDIS_URL,
+        APP_URL: 'http://localhost:3000',
+        COLLAB_JWT_PUBLIC_KEYS: JSON.stringify([{ ...publicKey, d: 'SECRET' }]),
+      }),
+    ).toThrow(/COLLAB_JWT_PUBLIC_KEYS/);
     expect(() => parseEnv('web', webEnvSchema, { NODE_ENV: 'test' })).toThrow(/API_INTERNAL_URL/);
   });
 });

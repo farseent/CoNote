@@ -1,4 +1,5 @@
 import type {
+  CollabTokenResponse,
   AssetDto,
   AssetUploadTarget,
   AssignableRole,
@@ -13,12 +14,9 @@ import type {
   MemberDto,
   MovePageRequest,
   PageAccessRole,
-  PageContentDto,
   PageDto,
   PagePermissionDto,
   RegisterRequest,
-  SavePageContentRequest,
-  SavedPageContentDto,
   SessionInfoDto,
   UpdateProfileRequest,
   UserDto,
@@ -213,11 +211,10 @@ export const api = {
   listTrash: (workspaceId: string) =>
     request<{ pages: PageDto[] }>('GET', `/api/v1/workspaces/${enc(workspaceId)}/trash?limit=100`),
 
-  // ───────────── Page content (interim, D54) and images (D55) ─────────────
-  getPageContent: (pageId: string) =>
-    request<PageContentDto>('GET', `/api/v1/pages/${enc(pageId)}/content`),
-  savePageContent: (pageId: string, input: SavePageContentRequest) =>
-    request<SavedPageContentDto>('PUT', `/api/v1/pages/${enc(pageId)}/content`, input),
+  // ───────────── Live collaboration (PAGE-10) and images (D55) ─────────────
+  /** A 60-second token for opening the page's document on the collaboration server. */
+  createCollabToken: (pageId: string) =>
+    request<CollabTokenResponse>('POST', `/api/v1/pages/${enc(pageId)}/collab-token`, {}),
   authorizeImageUpload: (input: CreateAssetUploadRequest) =>
     request<{ asset: AssetDto; upload: AssetUploadTarget }>(
       'POST',

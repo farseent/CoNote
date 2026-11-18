@@ -4,26 +4,21 @@ import type { Editor } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createDefaultRegistry, createEditorExtensions } from '@conote/editor';
-import { emptyEditorDocument, type EditorDocument, type PageContentDto } from '@conote/shared';
-import { api, describeApiError } from '@/lib/api-client';
+import { createEditorExtensions } from '@conote/editor';
+import { createCollaborativeRegistry } from '@conote/editor/collaboration';
+import type * as Y from 'yjs';
+import { describeApiError } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
-import {
-  AutosaveController,
-  trackPendingSave,
-  waitForPendingSave,
-  type AutosaveState,
-} from '@/lib/autosave';
+import type { CollabSession, CollabState } from '@/lib/collab-session';
+import { useCollabSession } from '@/lib/use-collab-session';
 import {
   IMAGE_ACCEPT,
   ImageUploadError,
   checkImageFile,
   uploadPageImage,
 } from '@/lib/image-upload';
-import { useLoad } from '@/lib/use-load';
 import { EditorToolbar } from './editor-toolbar';
-import { classifySaveError } from './save-errors';
-import { SaveStatus } from './save-status';
+import { CollabStatus } from './collab-status';
 import { createSlashMenuRender } from './slash-menu';
 
 const IMAGE_INPUT_ID = 'editor-image-input';
@@ -35,22 +30,26 @@ function openImagePicker(): void {
 
 interface Props {
   pageId: string;
-  /** Whether the person may edit the page (EDITOR or above). Viewers get a read-only view. */
+  /**
+   * Whether the page's role allows editing (EDITOR or above), from the page list. A hint only:
+   * the collaboration server decides, and a read-only connection cannot change the document.
+   */
   canEdit: boolean;
   /** Receives the editor once created; used by tests and future features. */
   onReady?: (editor: Editor) => void;
 }
 
-/** Loads a page's document, then shows the editor (or a read-only view). */
-export function PageEditor({ pageId, canEdit, onReady }: Props) {
-  const load = useCallback(async () => {
-    // A save that outlived the previous editor must land before we read the page again.
-    await waitForPendingSave(pageId);
-    return api.getPageContent(pageId);
-  }, [pageId]);
-  const { data, error, loading, reload } = useLoad(load);
+const alertBox = 'rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-800';
 
-  if (loading) {
+/**
+ * The page's editor, connected to the live document (WEBSOCKET_PROTOCOL §6). The document
+ * itself is the Yjs document on the collaboration server: there is no separate save step, so
+ * this component has no save button, no revision and no conflict dialog.
+ */
+export function PageEditor({ pageId, canEdit, onReady }: Props) {
+  const { session, state } = useCollabSession(pageId);
+
+  if (state === null || session === null || (state.phase === 'connecting' && !state.everSynced)) {
     return (
       <div
         role="status"
@@ -65,16 +64,20 @@ export function PageEditor({ pageId, canEdit, onReady }: Props) {
       </div>
     );
   }
-  if (data === null) {
+  if (state.phase === 'denied' || state.phase === 'revoked') {
     return (
-      <div
-        role="alert"
-        className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-800"
-      >
-        <p>{error ?? 'The document could not be loaded.'}</p>
+      <div role="alert" className={alertBox}>
+        <p>{state.reason ?? 'This page is no longer available to you.'}</p>
+      </div>
+    );
+  }
+  if (state.phase === 'unavailable' || session.doc === null) {
+    return (
+      <div role="alert" className={alertBox}>
+        <p>The document could not be opened right now. We will keep trying.</p>
         <button
           type="button"
-          onClick={reload}
+          onClick={() => session.retry()}
           className="mt-2 rounded-md border border-red-300 bg-white px-3 py-1.5 font-medium hover:bg-red-100"
         >
           Try again
@@ -84,34 +87,35 @@ export function PageEditor({ pageId, canEdit, onReady }: Props) {
   }
   return (
     <LoadedEditor
+      key={state.generation}
       pageId={pageId}
       canEdit={canEdit}
-      initial={data}
+      doc={session.doc}
+      session={session}
+      state={state}
       {...(onReady ? { onReady } : {})}
     />
   );
 }
 
-function LoadedEditor({ pageId, canEdit, initial, onReady }: Props & { initial: PageContentDto }) {
+function LoadedEditor({
+  pageId,
+  canEdit,
+  doc,
+  session,
+  state,
+  onReady,
+}: Props & { doc: Y.Doc; session: CollabSession; state: CollabState }) {
   const { guard } = useAuth();
-  const controllerRef = useRef<AutosaveController | null>(null);
-  const initialRevision = useRef(initial.revision);
   const uploadRef = useRef<(files: File[]) => void>(() => undefined);
-
-  const [saveState, setSaveState] = useState<AutosaveState>({
-    status: 'saved',
-    revision: initial.revision,
-    lastSavedAt: null,
-    attempt: 0,
-  });
-  const [contentError, setContentError] = useState(false);
   const [uploading, setUploading] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
-  const [resolving, setResolving] = useState(false);
 
-  // Built once: the registry holds the extensions, the host connects them to the page.
+  const editable = canEdit && !state.readOnly;
+
+  // Built once per document: the registry holds the extensions, the host connects them to the page.
   const [extensions] = useState(() =>
-    createEditorExtensions(createDefaultRegistry(), {
+    createEditorExtensions(createCollaborativeRegistry(doc), {
       host: { requestImage: openImagePicker },
       renderSlashMenu: createSlashMenuRender(),
     }),
@@ -119,11 +123,7 @@ function LoadedEditor({ pageId, canEdit, initial, onReady }: Props & { initial: 
 
   const editor = useEditor({
     extensions,
-    content: initial.content ?? emptyEditorDocument(),
-    editable: canEdit,
-    // Content that does not fit the schema is reported, never silently rewritten and saved.
-    enableContentCheck: true,
-    onContentError: () => setContentError(true),
+    editable,
     immediatelyRender: false, // the page is server-rendered; the editor mounts on the client
     editorProps: {
       attributes: {
@@ -156,58 +156,25 @@ function LoadedEditor({ pageId, canEdit, initial, onReady }: Props & { initial: 
     if (editor && onReady) onReady(editor);
   }, [editor, onReady]);
 
-  // Read-only for viewers, and whenever saving is impossible or the content is not trustworthy.
-  const blocked = saveState.status === 'blocked';
+  // Follows the server: a downgrade or upgrade arrives as a state change.
   useEffect(() => {
-    editor?.setEditable(canEdit && !contentError && !blocked);
-  }, [editor, canEdit, contentError, blocked]);
+    editor?.setEditable(editable);
+  }, [editor, editable]);
 
-  // Autosave.
+  // Leaving with changes the server has not confirmed would lose them: ask first.
   useEffect(() => {
-    if (!editor || !canEdit || contentError) return;
-    const controller = new AutosaveController({
-      initialRevision: initialRevision.current,
-      getContent: () => editor.getJSON() as EditorDocument,
-      save: async (content, baseRevision) => {
-        const saved = await guard(() => api.savePageContent(pageId, { baseRevision, content }));
-        return { revision: saved.revision };
-      },
-      classify: classifySaveError,
-      onState: setSaveState,
-    });
-    controllerRef.current = controller;
-    const onUpdate = () => controller.notifyChange();
-    editor.on('update', onUpdate);
-
-    const flushIfHidden = () => {
-      if (document.visibilityState === 'hidden') void controller.flush();
-    };
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!controller.hasUnsavedChanges()) return;
-      void controller.flush();
-      event.preventDefault(); // asks the browser to confirm leaving
+      if (!session.hasUnsyncedChanges()) return;
+      event.preventDefault();
     };
-    const onOnline = () => void controller.flush();
-    document.addEventListener('visibilitychange', flushIfHidden);
     window.addEventListener('beforeunload', onBeforeUnload);
-    window.addEventListener('online', onOnline);
-
-    return () => {
-      editor.off('update', onUpdate);
-      document.removeEventListener('visibilitychange', flushIfHidden);
-      window.removeEventListener('beforeunload', onBeforeUnload);
-      window.removeEventListener('online', onOnline);
-      // Leaving the page: finish the save in the background; the next load waits for it.
-      trackPendingSave(pageId, controller.flush());
-      controller.dispose();
-      controllerRef.current = null;
-    };
-  }, [editor, canEdit, contentError, pageId, guard]);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [session]);
 
   // Images: picker, paste and drop all end up here.
   const uploadFiles = useCallback(
     (files: File[]) => {
-      if (!editor || !canEdit) return;
+      if (!editor || !editable) return;
       void (async () => {
         setNotice(null);
         setUploading((n) => n + files.length);
@@ -224,56 +191,16 @@ function LoadedEditor({ pageId, canEdit, initial, onReady }: Props & { initial: 
         }
       })();
     },
-    [editor, canEdit, pageId, guard],
+    [editor, editable, pageId, guard],
   );
   // The editor's paste/drop handlers are created once; they call the latest function.
   useEffect(() => {
     uploadRef.current = uploadFiles;
   }, [uploadFiles]);
 
-  const loadLatest = async () => {
-    if (!editor || !controllerRef.current) return;
-    setResolving(true);
-    try {
-      const latest = await guard(() => api.getPageContent(pageId));
-      editor.commands.setContent(latest.content ?? emptyEditorDocument(), { emitUpdate: false });
-      controllerRef.current.resetToStored(latest.revision);
-      setNotice(null);
-    } catch (error) {
-      setNotice(describeApiError(error));
-    } finally {
-      setResolving(false);
-    }
-  };
-  const overwrite = async () => {
-    if (!controllerRef.current) return;
-    setResolving(true);
-    try {
-      const latest = await guard(() => api.getPageContent(pageId));
-      controllerRef.current.resolveConflictByOverwriting(latest.revision);
-      setNotice(null);
-    } catch (error) {
-      setNotice(describeApiError(error));
-    } finally {
-      setResolving(false);
-    }
-  };
-
-  if (contentError) {
-    return (
-      <div
-        role="alert"
-        className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-800"
-      >
-        This document contains content this editor cannot display, so it is shown read-only and
-        nothing will be saved. Please contact support.
-      </div>
-    );
-  }
-
   return (
-    <div className="conote-editor" data-editable={canEdit ? 'true' : 'false'}>
-      {canEdit && editor && (
+    <div className="conote-editor" data-editable={editable ? 'true' : 'false'}>
+      {editable && editor && (
         <>
           <EditorToolbar
             editor={editor}
@@ -293,18 +220,12 @@ function LoadedEditor({ pageId, canEdit, initial, onReady }: Props & { initial: 
               event.target.value = ''; // allow choosing the same file again
             }}
           />
-          <div className="mt-2 min-h-6">
-            <SaveStatus
-              state={saveState}
-              busy={resolving}
-              onRetry={() => void controllerRef.current?.flush()}
-              onLoadLatest={() => void loadLatest()}
-              onOverwrite={() => void overwrite()}
-            />
-          </div>
         </>
       )}
-      {!canEdit && (
+      <div className="mt-2 min-h-6">
+        <CollabStatus state={state} onRetry={() => session.retry()} />
+      </div>
+      {!editable && (
         <p className="mb-2 text-sm text-slate-500" role="note">
           You have read-only access to this page.
         </p>

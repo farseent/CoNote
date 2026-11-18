@@ -16,6 +16,7 @@
     "infra:reset": "docker compose -f infra/docker-compose.yml down -v",
     "build:packages": "pnpm --filter \"./packages/*\" run build",
     "build": "pnpm run build:packages && pnpm --filter \"./apps/*\" run build",
+    "collab:keys": "node scripts/generate-collab-keys.mjs",
     "dev:api": "pnpm --filter @conote/api run dev",
     "dev:collab": "pnpm --filter @conote/collab run dev",
     "dev:web": "pnpm --filter @conote/web run dev",

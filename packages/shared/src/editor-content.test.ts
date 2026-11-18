@@ -7,7 +7,6 @@ import {
   emptyEditorDocument,
   isAllowedLinkHref,
   normalizeLinkInput,
-  savePageContentRequestSchema,
   validateEditorDocument,
 } from './index.js';
 
@@ -145,28 +144,8 @@ describe('links', () => {
   });
 });
 
-describe('save request schema', () => {
-  const ok = { baseRevision: 0, content: emptyEditorDocument() };
-  it('accepts a valid request and reports invalid content with a path', () => {
-    expect(savePageContentRequestSchema.safeParse(ok).success).toBe(true);
-    const bad = savePageContentRequestSchema.safeParse({
-      ...ok,
-      content: doc({ type: 'heading', attrs: { level: 7 } }),
-    });
-    expect(bad.success).toBe(false);
-    expect(bad.error?.issues[0]?.path).toEqual(['content', 'content', 0, 'attrs', 'level']);
-  });
-  it('rejects unknown fields and bad revisions', () => {
-    for (const extra of [
-      { extra: 1 },
-      { baseRevision: -1 },
-      { baseRevision: 1.5 },
-      { baseRevision: '1' },
-    ]) {
-      expect(savePageContentRequestSchema.safeParse({ ...ok, ...extra }).success).toBe(false);
-    }
-  });
-  it('document schema is usable on its own', () => {
+describe('editor document schema', () => {
+  it('is usable on its own', () => {
     expect(editorDocumentSchema.safeParse(emptyEditorDocument()).success).toBe(true);
   });
 });

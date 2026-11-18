@@ -8,6 +8,9 @@ if [ ! -f .env ]; then
   echo "Created .env from .env.example"
 fi
 
+# Collaboration token keys (docs/DEPLOYMENT.md); an existing key is never replaced.
+node scripts/generate-collab-keys.mjs --write
+
 command -v pnpm >/dev/null || { echo "pnpm is required (corepack enable)"; exit 1; }
 command -v docker >/dev/null || { echo "Docker is required for local PostgreSQL and Redis"; exit 1; }
 

@@ -1,7 +1,7 @@
 # CoNote – Technical Decisions
 
-**Status:** Phase 1 infrastructure implemented and Phase 1b spike executed; Phase 2 authentication and user management implemented and locally verified. D41–D47 explicitly accepted by the project owner on 2026-11-13. Phase 2 GitHub Actions CI was deferred by the owner and later reported as passed by the owner (recorded 2026-11-15). Evidence and remaining limitations are tracked in HANDOVER.md.
-**Last updated:** 2026-11-16
+**Status:** Phase 1 infrastructure implemented and Phase 1b spike executed; Phase 2 authentication and user management implemented and locally verified. D41–D47 explicitly accepted by the project owner on 2026-11-13. Phase 2 GitHub Actions CI was deferred by the owner and later reported as passed by the owner (recorded 2026-11-15). Evidence and remaining limitations are tracked in HANDOVER.md. D54–D57 were accepted by the owner on 2026-11-16 and D58–D60 on 2026-11-18.
+**Last updated:** 2026-11-18
 **Owner:** Project owner (approvals) / Claude (drafting)
 
 This is the permanent decision register for CoNote. Decision IDs (`D#`) and unresolved-question IDs (`U#`) are **permanent**: they are never renumbered or reused. A changed decision is recorded by adding a new decision that supersedes the old one and updating the old one's status.
@@ -77,6 +77,9 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 | D55 | Image upload flow, limits and storage adapter (partly resolves U7) | Accepted (owner approval, 2026-11-16) |
 | D56 | Editor document schema v1 and Tiptap configuration | Accepted (owner approval, 2026-11-16) |
 | D57 | Phase 5 Yjs integration: binding entry point, store design, persisted digest, seeding | Accepted (owner approval, 2026-11-16) (made under the owner's "do what is best for me"; approved after local verification) |
+| D58 | `apps/collab` may import `@conote/editor` (to seed Yjs documents with the editor's own schema) | Accepted (owner approval, 2026-11-18) |
+| D59 | Remove the interim page-content endpoints (CONTENT-01/02) and the HTTP autosave; keep `page_contents` as a read-only seed source | Accepted (owner approval, 2026-11-18) |
+| D60 | Phase 6 collaboration server: token carries identity only, one socket per document, application messages, access changes and client resync rules, presence disabled until Phase 7 | Accepted (owner approval, 2026-11-18) |
 
 ---
 
@@ -478,6 +481,36 @@ Protected pages call `requireUser()` (server component, asks the API with the fo
   6. **Seeding:** `contentToYDoc` (server-side, from the validated `page_contents` JSON, D54) plus `DocumentStore.seedIfEmpty`, which seeds under the page lock exactly once. Clients never seed (two clients seeding separately would duplicate the text).
   7. **Out of scope and unchanged:** `DocumentSnapshot`/versions (Phase 8), the Hocuspocus server and provider (Phase 6), the web editor wiring and removal of `page_contents` (Phase 6), awareness/presence (Phase 7).
 - **Consequences / open items:** (a) Phase 6 needs `contentToYDoc`, which needs the ProseMirror schema from `packages/editor`; ARCHITECTURE §5 does not allow `collab → editor`. Either extend the boundary (and the ESLint rule and its test) or move schema-dependent conversion elsewhere; decide at the start of Phase 6. (b) The `@tiptap/y-tiptap` 3.0.7 pin and the peer dependencies were confirmed by the owner's `pnpm install` on 2026-11-16 (no peer warnings; `pnpm why yjs` reports one version, 13.6.33). Bumping to a newer `y-tiptap` (3.3.0 exists) is a separate, tested change (D13). (c) A compaction threshold trigger is not wired (no server yet); `COMPACTION_UPDATE_THRESHOLD` (200) and `compact({ minPendingRows })` are ready for Phase 6.
+
+### D58 – The collaboration server may import `@conote/editor`
+
+- **Status:** Accepted (owner approval, 2026-11-18). Proposed on 2026-11-17 (Phase 6); approved after the owner's local verification (HANDOVER §11.11). This is the choice D57 left open for the start of Phase 6.
+- **Context:** Seeding an existing page into its Yjs document needs `contentToYDoc`, which needs the ProseMirror schema from `packages/editor`. ARCHITECTURE §5 did not allow `collab → editor`. Clients must never seed (D57, WEBSOCKET_PROTOCOL §5a), so the conversion has to run on the server.
+- **Options:** (a) allow `collab → editor`; (b) move the schema-dependent conversion into `packages/shared` (shared would then depend on Tiptap); (c) copy the schema into the collab server (two schemas to keep in step).
+- **Decision:** (a), through the existing entry point `@conote/editor/collaboration` only. The ESLint rule (`eslint.config.mjs`), `tests/boundaries.test.ts` and ARCHITECTURE §5 were updated: `collab → shared, db, editor`; `editor` still imports nothing from the apps; `api` still must not import `editor`.
+- **Consequences:** the collab server loads the Tiptap schema packages (no DOM is needed; verified by the Phase 6 seeding tests). A schema change in the editor now also affects seeding, which is the intended single source of truth. The dependency disappears if the interim seed source is dropped (D59) and seeding is replaced by a one-off migration.
+
+### D59 – Interim page-content endpoints removed; `page_contents` kept only as a seed source
+
+- **Status:** Accepted (owner approval, 2026-11-18). Proposed on 2026-11-17 (Phase 6); approved after the owner's local verification (HANDOVER §11.11), where a Phase 4 page opened for the first time after Phase 6 showed its content exactly once. D54 promised this removal for Phase 6; the open part is what happens to the table.
+- **Context:** The task forbids a second synchronization mechanism. The Phase 4 HTTP autosave (`CONTENT-01/02`) would keep writing a copy that nothing reads and that diverges from the Yjs document.
+- **Decision:** (1) `CONTENT-01` and `CONTENT-02`, their shared schemas, the `contentSave` rate limit, the web autosave controller and the save/conflict UI are **deleted**. (2) The `page_contents` table and its Prisma model stay, **read-only**: the collab server reads a page's row once, when the page has no Yjs state, and seeds it through `DocumentStore.seedIfEmpty` (exactly once under the page lock). Nothing writes the table any more. (3) Content that cannot be converted (fails validation) makes the page refuse to open instead of opening blank; the row is untouched.
+- **Not decided here:** dropping the table. That needs a migration and an owner decision on whether every page has been opened (and so seeded) first, or whether a one-off import should seed all pages. Until then the table is data the owner may still need.
+- **Consequences:** a page opened for the first time after Phase 6 shows its Phase 4 content; after that, `page_contents` is never consulted for that page. A page edited in Phase 4 and never opened in Phase 6 keeps its row.
+
+### D60 – Phase 6 collaboration server behaviour
+
+- **Status:** Accepted (owner approval, 2026-11-18). Proposed on 2026-11-17 (Phase 6); approved after the owner's local verification (HANDOVER §11.11). Details in WEBSOCKET_PROTOCOL §17.
+- **Decisions:**
+  1. **The token carries identity only** (`sub`, `sid`, `pid`, `jti`, `iat`, `exp`). The role is not in it: the server computes it from PostgreSQL on every connection and revalidation, with the same pure function as the API (`resolveEffectivePageRole`, through `resolveCollabAccess` in `packages/db`). `PAGE-10` returns `role`/`readOnly` only as UI hints.
+  2. **One WebSocket per document** in the web client, so closing a socket on revocation can never affect another page. The server also supports several documents on one socket (each authenticated on its own token), and closes the socket, not only the document channel, when it revokes a connection (Hocuspocus 4.8's `Connection.close` ends only the document channel).
+  3. **Application messages:** the server sends `access.changed`, `access.revoked`, `server.shutting_down` and `error`. It registers no client commands in Phase 6 (version commands come in Phase 8); anything a client sends is answered with `error INVALID_MESSAGE`, five invalid messages close the connection (4400).
+  4. **Client rules after access changes:** on `access.revoked` the client stops for good and drops its document; on a downgrade to read-only it starts over on a fresh document (so refused local edits do not remain in its copy); on an upgrade to editable it calls `forceSync()` (updates the server dropped while read-only leave a gap that later updates would wait on; shown by the Phase 6 test).
+  5. **Presence is off until Phase 7:** the server discards all client-supplied awareness state; nothing is stored or relayed. Phase 7 replaces this with the identity binding of WEBSOCKET_PROTOCOL §6.
+  6. **Origin:** a present `Origin` must be in `COLLAB_ALLOWED_ORIGINS` (default `APP_URL`), otherwise the upgrade is refused with 403. A missing `Origin` (non-browser client) is allowed; such a client still needs a valid token.
+  7. **Store retries and shutdown:** a failed store keeps the document in memory and is retried with a growing delay (1, 2, 5, 10, 30 s); a document whose page no longer exists is dropped; shutdown flushes all stores first, tells clients, closes with 1012, and is bounded by `COLLAB_SHUTDOWN_TIMEOUT_MS`.
+  8. **Single instance:** the Hocuspocus Redis extension is not used (D28, multi-instance is Phase 9). Redis is used for access events only.
+- **Consequences:** items that remain open are listed in HANDOVER §11.5.
 
 ## Unresolved decisions
 

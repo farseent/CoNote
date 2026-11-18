@@ -2,13 +2,26 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Editor } from '@tiptap/core';
+import * as Y from 'yjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { contentToYDoc } from '@conote/editor/collaboration';
 import type { EditorDocument, UserDto } from '@conote/shared';
 import { AuthProvider } from '@/lib/auth-context';
+import type { CollabSession, CollabState } from '@/lib/collab-session';
 import { PageEditor } from './page-editor';
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn(), push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router, usePathname: () => '/' }));
+
+// The live connection is tested on its own (collab-session.test.ts and the collab server's
+// integration tests). Here the editor gets a session whose state the test controls.
+const live = vi.hoisted(() => ({
+  current: { session: null, state: null } as {
+    session: unknown;
+    state: unknown;
+  },
+}));
+vi.mock('@/lib/use-collab-session', () => ({ useCollabSession: () => live.current }));
 
 const PAGE_ID = '0b1b6a8e-3a52-4c1d-8a49-2b8a4f3d1e01';
 const ASSET_ID = '9d0c3a2f-4e1b-4c11-8f5b-6f1f0a2e8a39';
@@ -49,11 +62,6 @@ interface Call {
 }
 type Reply = { status: number; body: unknown } | 'network-error';
 interface ServerState {
-  content: EditorDocument | null;
-  revision: number;
-  /** Queue of forced replies for the next PUT content calls. */
-  putReplies: Reply[];
-  getReplies: Reply[];
   imageReply?: { authorize?: Reply; bytes?: Reply; complete?: Reply };
 }
 
@@ -63,14 +71,9 @@ const fail = (status: number, code: string): Reply => ({
   body: { success: false, error: { code, message: 'server message', requestId: 'r1' } },
 });
 
+/** Only the image endpoints exist: there is no page-content endpoint any more. */
 function installServer(initial: Partial<ServerState> = {}) {
-  const state: ServerState = {
-    content: null,
-    revision: 0,
-    putReplies: [],
-    getReplies: [],
-    ...initial,
-  };
+  const state: ServerState = { ...initial };
   const calls: Call[] = [];
   vi.stubGlobal(
     'fetch',
@@ -84,27 +87,7 @@ function installServer(initial: Partial<ServerState> = {}) {
       };
       calls.push(call);
       let reply: Reply;
-      if (method === 'GET' && url === `/api/v1/pages/${PAGE_ID}/content`) {
-        reply =
-          state.getReplies.shift() ??
-          ok({
-            content: state.content,
-            schemaVersion: 1,
-            revision: state.revision,
-            updatedAt: state.content ? NOW : null,
-          });
-      } else if (method === 'PUT' && url === `/api/v1/pages/${PAGE_ID}/content`) {
-        reply = state.putReplies.shift() ?? {
-          status: 200,
-          body: { success: true, data: { revision: 0, updatedAt: NOW } },
-        };
-        if (reply !== 'network-error' && reply.status === 200) {
-          const body = call.body as { baseRevision: number; content: EditorDocument };
-          state.content = body.content;
-          state.revision = body.baseRevision + 1;
-          reply = ok({ revision: state.revision, updatedAt: NOW });
-        }
-      } else if (method === 'POST' && url === '/api/v1/assets/uploads') {
+      if (method === 'POST' && url === '/api/v1/assets/uploads') {
         reply = state.imageReply?.authorize ?? {
           status: 201,
           body: {
@@ -150,14 +133,43 @@ function installServer(initial: Partial<ServerState> = {}) {
       });
     }),
   );
+  return { state, calls };
+}
+
+// ───────────── a controllable collaboration session ─────────────
+
+const baseState: CollabState = {
+  phase: 'live',
+  everSynced: true,
+  readOnly: false,
+  role: 'EDITOR',
+  unsyncedChanges: false,
+  generation: 1,
+  reason: null,
+};
+const retry = vi.fn();
+let unsynced = false;
+
+function fakeSession(ydoc: Y.Doc | null): CollabSession {
   return {
-    state,
-    calls,
-    puts: () =>
-      calls.filter(
-        (c) => c.method === 'PUT' && c.url.endsWith('/content') && c.url.includes('/pages/'),
-      ),
-  };
+    doc: ydoc,
+    provider: null,
+    getState: () => baseState,
+    subscribe: () => () => undefined,
+    hasUnsyncedChanges: () => unsynced,
+    retry,
+    start: () => undefined,
+    destroy: () => undefined,
+  } as unknown as CollabSession;
+}
+function setSession(state: Partial<CollabState>, content?: EditorDocument) {
+  const ydoc =
+    state.phase === 'denied' || state.phase === 'revoked'
+      ? null
+      : content
+        ? contentToYDoc(content)
+        : new Y.Doc();
+  live.current = { session: fakeSession(ydoc), state: { ...baseState, ...state } };
 }
 
 let editor: Editor;
@@ -174,10 +186,12 @@ async function ready() {
 }
 const type = (text: string) => act(() => void editor.commands.insertContent(text));
 const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
-const status = () => screen.getByRole('status', { name: '' }).textContent;
 
 beforeEach(() => {
   editor = undefined as unknown as Editor;
+  unsynced = false;
+  retry.mockReset();
+  setSession({});
   vi.useFakeTimers({ shouldAdvanceTime: true });
 });
 afterEach(() => {
@@ -186,10 +200,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('loading', () => {
-  it('shows a loading state, then the existing document', async () => {
-    installServer({
-      content: doc(
+describe('opening a page', () => {
+  it('shows a loading state until the document has synced for the first time', () => {
+    setSession({ phase: 'connecting', everSynced: false });
+    mount();
+    expect(screen.getByRole('status', { name: 'Loading document' })).toBeTruthy();
+    expect(document.querySelector('.ProseMirror')).toBeNull();
+  });
+
+  it('shows the live document with its toolbar and a connection indicator', async () => {
+    setSession(
+      {},
+      doc(
         {
           type: 'heading',
           attrs: { level: 2 },
@@ -197,18 +219,15 @@ describe('loading', () => {
         },
         p('Body text'),
       ),
-      revision: 4,
-    });
+    );
     mount();
-    expect(screen.getByRole('status', { name: 'Loading document' })).toBeTruthy();
     expect(await screen.findByRole('heading', { level: 2, name: 'Quarterly plan' })).toBeTruthy();
     expect(screen.getByText('Body text')).toBeTruthy();
     expect(screen.getByRole('toolbar', { name: 'Formatting' })).toBeTruthy();
-    expect(screen.getByText('Saved')).toBeTruthy();
+    expect(screen.getByText('Live')).toBeTruthy();
   });
 
   it('opens an empty, editable document for a page that was never edited', async () => {
-    const server = installServer();
     mount();
     await ready();
     expect(editor.isEmpty).toBe(true);
@@ -216,189 +235,110 @@ describe('loading', () => {
     expect(document.querySelector('p.is-editor-empty')?.getAttribute('data-placeholder')).toMatch(
       /commands/,
     );
-    await advance(20_000);
-    expect(server.puts()).toHaveLength(0); // opening a page does not save anything
   });
 
-  it('shows an error with a retry button when loading fails, and recovers', async () => {
-    const server = installServer({ content: doc(p('Hello')), revision: 1 });
-    server.state.getReplies.push(fail(500, 'INTERNAL_ERROR'));
+  it('never calls the page-content API: the document lives in the collaborative document', async () => {
+    const server = installServer();
     mount();
-    const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toMatch(/went wrong|try again/i);
-    await userEvent
-      .setup({ advanceTimers: vi.advanceTimersByTime })
-      .click(within(alert).getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText('Hello')).toBeTruthy();
-  });
-
-  it('refuses to edit content the editor cannot represent, and never saves it', async () => {
-    const server = installServer({
-      content: { type: 'doc', content: [{ type: 'mystery' }] } as unknown as EditorDocument,
-      revision: 2,
-    });
-    mount();
-    expect((await screen.findByRole('alert')).textContent).toMatch(/cannot display/);
-    expect(screen.queryByRole('toolbar')).toBeNull();
+    await ready();
+    await type('hello');
     await advance(20_000);
-    expect(server.puts()).toHaveLength(0);
+    expect(
+      server.calls.filter((c) => c.url.includes('/content') && c.url.includes('/pages/')),
+    ).toEqual([]);
   });
 });
 
-describe('read-only access (viewers)', () => {
-  it('shows content without toolbar, status or saving', async () => {
-    const server = installServer({ content: doc(p('Secret plan')), revision: 3 });
+describe('connection states', () => {
+  it('explains when the document cannot be opened and retries on request', async () => {
+    setSession({ phase: 'unavailable', everSynced: false }, undefined);
+    live.current = {
+      session: fakeSession(null),
+      state: { ...baseState, phase: 'unavailable', everSynced: false },
+    };
+    mount();
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/could not be opened/);
+    await userEvent
+      .setup({ advanceTimers: vi.advanceTimersByTime })
+      .click(within(alert).getByRole('button', { name: 'Try again' }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['denied', 'You do not have access to this page.'],
+    ['revoked', 'Your access to this page has ended.'],
+  ] as const)('%s: shows the reason and no editor', async (phase, reason) => {
+    setSession({ phase, reason, readOnly: true });
+    mount();
+    expect((await screen.findByRole('alert')).textContent).toContain(reason);
+    expect(document.querySelector('.ProseMirror')).toBeNull();
+    expect(screen.queryByRole('toolbar')).toBeNull();
+  });
+
+  it('keeps the editor and says so when offline, with a reconnect button', async () => {
+    setSession({ phase: 'offline' }, doc(p('Still here')));
+    mount();
+    expect(await screen.findByText('Still here')).toBeTruthy();
+    expect(screen.getByText(/Offline\./)).toBeTruthy();
+    await userEvent
+      .setup({ advanceTimers: vi.advanceTimersByTime })
+      .click(screen.getByRole('button', { name: 'Reconnect now' }));
+    expect(retry).toHaveBeenCalledOnce();
+    expect(editor.isEditable).toBe(true);
+  });
+
+  it('shows that changes are still being sent', async () => {
+    setSession({ unsyncedChanges: true });
+    mount();
+    expect(await screen.findByText('Syncing…')).toBeTruthy();
+  });
+
+  it('asks the browser to confirm leaving while changes are unconfirmed', async () => {
+    mount();
+    await ready();
+    const clean = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(clean);
+    expect(clean.defaultPrevented).toBe(false);
+    unsynced = true;
+    const dirty = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(dirty);
+    expect(dirty.defaultPrevented).toBe(true);
+  });
+});
+
+describe('read-only access', () => {
+  it('a role without edit rights sees content without toolbar and cannot edit', async () => {
+    setSession({ readOnly: true, role: 'VIEWER' }, doc(p('Secret plan')));
     mount(false);
     expect(await screen.findByText('Secret plan')).toBeTruthy();
     expect(editor.isEditable).toBe(false);
     expect(document.querySelector('.ProseMirror')?.getAttribute('contenteditable')).toBe('false');
     expect(screen.queryByRole('toolbar')).toBeNull();
     expect(screen.getByText(/read-only access/i)).toBeTruthy();
-    // Even a programmatic change never reaches the server from a read-only view.
-    type('x');
-    await advance(20_000);
-    expect(server.puts()).toHaveLength(0);
-  });
-});
-
-describe('autosave', () => {
-  it('saves after a pause, sending the revision it is based on', async () => {
-    const server = installServer({ content: doc(p('Start')), revision: 5 });
-    mount();
-    await ready();
-    await waitFor(() => expect(screen.getByText('Saved')).toBeTruthy());
-    type(' more');
-    expect(await screen.findByText('Unsaved changes')).toBeTruthy();
-    await advance(1400);
-    expect(server.puts()).toHaveLength(0);
-    await advance(300);
-    await waitFor(() => expect(server.puts()).toHaveLength(1));
-    const body = server.puts()[0]!.body as { baseRevision: number; content: EditorDocument };
-    expect(body.baseRevision).toBe(5);
-    expect(JSON.stringify(body.content)).toMatch(/more.*Start|Start.*more/);
-    expect(await screen.findByText('Saved')).toBeTruthy();
-    type('!');
-    await advance(1600);
-    await waitFor(() => expect(server.puts()).toHaveLength(2));
-    expect((server.puts()[1]!.body as { baseRevision: number }).baseRevision).toBe(6);
   });
 
-  it('keeps changes and retries after a network failure; "Retry now" works', async () => {
-    const server = installServer({ content: doc(p('A')), revision: 1 });
-    server.state.putReplies.push('network-error', 'network-error');
-    mount();
-    await ready();
-    type('b');
-    await advance(1600);
-    expect(await screen.findByText(/can’t save right now/i)).toBeTruthy();
-    expect(server.puts()).toHaveLength(1);
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await user.click(screen.getByRole('button', { name: 'Retry now' }));
-    await waitFor(() => expect(server.puts()).toHaveLength(2));
-    await advance(5200); // automatic retry after the second failure
-    await waitFor(() => expect(screen.getByText('Saved')).toBeTruthy());
-    expect(JSON.stringify(server.state.content)).toMatch(/bA|Ab/);
-  });
-
-  it('on a conflict, offers to load the latest version', async () => {
-    const server = installServer({ content: doc(p('Mine')), revision: 1 });
-    server.state.putReplies.push({
-      status: 409,
-      body: { success: false, error: { code: 'CONFLICT', message: 'x', requestId: 'r' } },
-    });
-    mount();
-    await ready();
-    type(' edited');
-    await advance(1600);
-    const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toMatch(/changed somewhere else/i);
-    server.state.content = doc(p('Server version'));
-    server.state.revision = 9;
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await user.click(within(alert).getByRole('button', { name: /load the latest version/i }));
-    expect(await screen.findByText('Server version')).toBeTruthy();
-    await waitFor(() => expect(screen.getByText('Saved')).toBeTruthy());
-    type('!');
-    await advance(1600);
-    await waitFor(() => expect(server.puts()).toHaveLength(2));
-    expect((server.puts()[1]!.body as { baseRevision: number }).baseRevision).toBe(9);
-  });
-
-  it('on a conflict, can keep the local version on top of the latest revision', async () => {
-    const server = installServer({ content: doc(p('Mine')), revision: 1 });
-    server.state.putReplies.push({
-      status: 409,
-      body: { success: false, error: { code: 'CONFLICT', message: 'x', requestId: 'r' } },
-    });
-    mount();
-    await ready();
-    type('+');
-    await advance(1600);
-    const alert = await screen.findByRole('alert');
-    server.state.revision = 7;
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await user.click(within(alert).getByRole('button', { name: /keep my version/i }));
-    await waitFor(() => expect(server.puts()).toHaveLength(2));
-    expect((server.puts()[1]!.body as { baseRevision: number }).baseRevision).toBe(7);
-    expect(JSON.stringify(server.state.content)).toContain('Mine');
-  });
-
-  it('becomes read-only when the server says editing is no longer allowed', async () => {
-    const server = installServer({ content: doc(p('A')), revision: 1 });
-    server.state.putReplies.push(fail(403, 'FORBIDDEN'));
-    mount();
-    await ready();
-    type('b');
-    await advance(1600);
-    expect((await screen.findByRole('alert')).textContent).toMatch(/no longer save/i);
-    await waitFor(() => expect(editor.isEditable).toBe(false));
-    await advance(30_000);
-    expect(server.puts()).toHaveLength(1);
-  });
-
-  it('does not retry content the server refuses', async () => {
-    const server = installServer({ content: doc(p('A')), revision: 1 });
-    server.state.putReplies.push(fail(400, 'VALIDATION_ERROR'));
-    mount();
-    await ready();
-    type('b');
-    await advance(1600);
-    expect((await screen.findByRole('alert')).textContent).toMatch(/could not be saved/i);
-    await advance(60_000);
-    expect(server.puts()).toHaveLength(1);
-  });
-
-  it('asks the browser to confirm leaving while changes are unsaved', async () => {
-    installServer({ content: doc(p('A')), revision: 1 });
-    mount();
-    await ready();
-    const clean = new Event('beforeunload', { cancelable: true });
-    window.dispatchEvent(clean);
-    expect(clean.defaultPrevented).toBe(false);
-    type('b');
-    const dirty = new Event('beforeunload', { cancelable: true });
-    window.dispatchEvent(dirty);
-    expect(dirty.defaultPrevented).toBe(true);
-  });
-
-  it('saves pending changes when the editor is closed', async () => {
-    const server = installServer({ content: doc(p('A')), revision: 1 });
+  it('follows the server: read-only when it says so, editable again after an upgrade', async () => {
+    setSession({}, doc(p('Shared')));
     const view = mount();
     await ready();
-    type('b');
-    view.unmount();
-    await waitFor(() => expect(server.puts()).toHaveLength(1));
+    expect(editor.isEditable).toBe(true);
+
+    setSession({ readOnly: true, role: 'VIEWER' }, doc(p('Shared')));
+    view.rerender(
+      <AuthProvider initialUser={USER}>
+        <PageEditor pageId={PAGE_ID} canEdit onReady={(e) => (editor = e)} />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(editor.isEditable).toBe(false));
+    expect(screen.queryByRole('toolbar')).toBeNull();
   });
 
-  it('saves when the tab is hidden', async () => {
-    const server = installServer({ content: doc(p('A')), revision: 1 });
-    mount();
+  it("the server's answer wins over the page list: canEdit with a read-only connection stays read-only", async () => {
+    setSession({ readOnly: true, role: 'COMMENTER' }, doc(p('x')));
+    mount(true);
     await ready();
-    type('b');
-    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
-    document.dispatchEvent(new Event('visibilitychange'));
-    await waitFor(() => expect(server.puts()).toHaveLength(1));
-    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    expect(editor.isEditable).toBe(false);
   });
 });
 
@@ -414,7 +354,8 @@ describe('toolbar', () => {
     };
 
   async function open(content: EditorDocument = doc(p('hello'))) {
-    installServer({ content, revision: 1 });
+    installServer();
+    setSession({}, content);
     mount();
     await ready();
     await screen.findByRole('toolbar');
@@ -583,7 +524,8 @@ describe('images', () => {
     new File([new Uint8Array([0x89, 0x50, 0x4e])], 'Team photo.png', { type: 'image/png' });
 
   async function open(initial: Partial<ServerState> = {}) {
-    const server = installServer({ content: doc(p('hello')), revision: 1, ...initial });
+    const server = installServer(initial);
+    setSession({}, doc(p('hello')));
     mount();
     await ready();
     await screen.findByRole('toolbar');
@@ -617,10 +559,9 @@ describe('images', () => {
       contentType: 'image/png',
       sizeBytes: 3,
     });
-    // The new image is part of the document and gets saved by autosave.
-    await advance(1600);
-    await waitFor(() => expect(server.puts().length).toBeGreaterThan(0));
-    expect(JSON.stringify(server.state.content)).toContain(`/api/v1/assets/${ASSET_ID}`);
+    // The image is part of the collaborative document: it travels with the document, and no
+    // page-content request is made.
+    expect(server.calls.some((c) => c.url.includes('/pages/'))).toBe(false);
   });
 
   it('rejects unsupported and oversized files before sending anything', async () => {
@@ -659,7 +600,8 @@ describe('images', () => {
 
 describe('slash commands', () => {
   async function open() {
-    installServer({ content: doc({ type: 'paragraph' }), revision: 1 });
+    installServer();
+    setSession({}, doc({ type: 'paragraph' }));
     mount();
     await ready();
     await screen.findByRole('toolbar');

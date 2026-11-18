@@ -1,7 +1,8 @@
 # CoNote – WebSocket Protocol
 
 **Status:** Protocol design only. (Phase 3 note: the REST API now publishes the §10 access events `member.role_changed`, `member.removed`, `workspace.deleted` and `page.access_changed` to Redis after commit; nothing consumes them until Phase 6.) The Phase 1 collab process shell and health endpoints exist, but every document connection is deliberately rejected; no CoNote collaboration protocol feature is implemented. The disposable Phase 1b harness is prepared under `spikes/collab-poc/`, but S1–S11 have not yet been executed; all runtime-dependent statements below remain subject to the verification register.
-**Last updated:** 2026-11-16
+**Last updated:** 2026-11-17
+**Phase 6 note (2026-11-17):** the WebSocket server, authentication, permission enforcement, revalidation, reconnection handling and the web client are implemented and were owner-verified locally on 2026-11-18 (HANDOVER §11.11); §17 records what was built and where it differs from the design above. §§1–16 are otherwise unchanged.
 **Phase 5 note (2026-11-16):** no WebSocket feature exists yet. §5a records what Phase 5 implemented at the Yjs level (sync step 1/2 as library functions, local/remote update handling, seeding rule) so Phase 6 can wrap it in the wire protocol; it was executed in a preparation environment on 2026-11-16 (HANDOVER §10.8) but no wire protocol exists yet.
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); guarantees `G1`–`G7` and verification items `V#` are in [ARCHITECTURE.md](ARCHITECTURE.md) (§8, §18). REST contracts are in [API_CONTRACTS.md](API_CONTRACTS.md).
@@ -335,7 +336,7 @@ Every revalidation interval (initial 60 s, `COLLAB_REVALIDATE_INTERVAL_MS`, D22)
 - [ ] Size, rate and connection limits configured.
 - [ ] No document content, tokens or secrets in logs.
 
-## 13. Configuration summary (names provisional; finalized in Phase 6)
+## 13. Configuration summary (names finalized in Phase 6; see §17.9)
 
 | Setting | Meaning | Initial default |
 |---|---|---|
@@ -373,3 +374,67 @@ The Phase 1b harness is prepared but not yet executed. The items below are check
 - Tiptap Collaboration extension – https://tiptap.dev/docs/editor/api/extensions/collaboration
 - Yjs documentation (sync, awareness, relative positions) – https://docs.yjs.dev *(not fetched during Phase 0)*
 - RFC 6455 (WebSocket protocol, close codes) – https://www.rfc-editor.org/rfc/rfc6455 *(not fetched during Phase 0)*
+
+## 17. Phase 6: as implemented (2026-11-17)
+
+This section records what the Phase 6 collaboration server and client do, and where that differs from §§1–16 (which remain the design). Decisions D58–D60 (DECISIONS.md) were **accepted by the owner on 2026-11-18**. Test evidence is in TESTING.md §8.0e.
+
+### 17.1 Connection and token
+
+- The web client calls `POST /api/v1/pages/:pageId/collab-token` (`PAGE-10`) and receives `{ token, expiresAt, collabUrl, documentName, role, readOnly }`. The token is an EdDSA (Ed25519) JWT, header `kid`, lifetime 60 s, claims `iss=conote-api`, `aud=conote-collab`, `sub` (user), `sid` (session), `pid` (page), `jti`, `iat`, `exp`. **There is no role claim**; `role` and `readOnly` in the response are hints for the UI only.
+- The first connection uses the token just fetched; **every reconnection fetches a new one**.
+- The server verifies: signature against the public key named by `kid` (unknown or missing `kid` is refused), algorithm `EdDSA` only (so `alg: none` is refused), issuer, audience, expiry (5 s clock tolerance), claim shape, `iat` not in the future, and a lifetime of at most 65 s (a validly signed long-lived token is refused). Then it checks that `pid` equals the page in the document name.
+- Then, from PostgreSQL only (`resolveCollabAccess`, `packages/db`): the session exists, is not revoked, is within idle and absolute expiry and belongs to `sub`; the page exists and is not in the trash; `sub` is a member of the workspace; the effective page role (workspace role plus the page and ancestor overrides, via the same pure `resolveEffectivePageRole` as the API) is not `NONE`. Only then is the document loaded. `readOnly` is set for roles below `EDITOR` (VIEWER, COMMENTER).
+- A refusal is sent to the client as a reason string: `AUTH_FAILED` (token, session or `pid` mismatch), `ACCESS_DENIED`, `PAGE_NOT_FOUND`, `PROTOCOL_VIOLATION` (document name is not `page:<uuid>`), `RATE_LIMITED` (connection limits), `TRY_AGAIN_LATER` (PostgreSQL unavailable or an unexpected failure). **In Hocuspocus 4.8 a refusal does not close the WebSocket**; it sends a permission-denied message and no document connection exists afterwards. WebSocket close codes (§9) are used where the server closes the socket itself: 4410 revocation, 4429 flooding, 4400 repeated invalid application messages, 1012 shutdown, 1009 oversized messages (by the library).
+- `Origin`: a present header must be in `COLLAB_ALLOWED_ORIGINS` (default `APP_URL`), else HTTP 403 on the upgrade; a missing header is allowed (D60.6).
+- Several documents on one socket are supported by the library and each is authenticated separately. The web client uses one socket per document.
+
+### 17.2 Synchronization and persistence
+
+- Standard Hocuspocus/y-protocols sync; the server is the only place that seeds a document. On load: `DocumentStore.load`; if the page has no Yjs state but a `page_contents` row (D54), the row is converted with `contentToYDoc` and stored with `seedIfEmpty` (exactly once, also when several clients open the page at the same moment); invalid interim content makes the page refuse to open (D59). A page that was never edited writes nothing on open.
+- Stores are debounced (`COLLAB_STORE_DEBOUNCE_MS`, `COLLAB_STORE_MAX_DEBOUNCE_MS`), written through `DocumentStore.appendDiff` (no write when nothing changed), compacted after `COLLAB_COMPACT_UPDATE_COUNT` rows and when the last client leaves (D15).
+- **Nothing tells a client that a change is durable.** The client indicator says "Live", "Syncing…" or "Offline", never "Saved". Durability is only what `appendDiff` returned; a server that dies before the debounce fires loses those changes from its memory, and the clients that hold them resend them on reconnection (shown by the crash test).
+- A failed store keeps the document in memory and is retried after 1, 2, 5, 10 and then 30 s until it succeeds. A page that no longer exists stops being stored.
+- Graceful shutdown (SIGTERM): refuse new connections, send `server.shutting_down`, store every pending document, close connections with 1012, bounded by `COLLAB_SHUTDOWN_TIMEOUT_MS`.
+
+### 17.3 Read-only enforcement
+
+`connectionConfig.readOnly` is set from the database role when the connection opens; the library then refuses to apply document updates from that connection (the server answers each with a negative sync status). Updates that a read-only connection sends are counted and logged (first, then every 100th). The editor's `editable` flag is a UI convenience only. Verified for VIEWER and COMMENTER, including offline edits pushed after a reconnect and a client that forces an edit programmatically.
+
+### 17.4 Application messages (layer 3), as implemented
+
+Server to client: `access.changed { readOnly, role }`, `access.revoked { reason }` (`SESSION_REVOKED`, `MEMBER_REMOVED`, `ACCESS_REMOVED`, `PAGE_DELETED`, `WORKSPACE_DELETED`), `server.shutting_down {}`, `error { code, message }` (with `replyTo` when the request had an `id`). Envelope `{ v: 1, type, id?, payload }`, at most 8 KiB, validated with Zod on both sides (`packages/shared/src/collab-protocol.ts`). Client to server: none are registered in Phase 6. Every client message is answered with `error INVALID_MESSAGE`; five of them close the connection with 4400. The messages for versions and comments (§7) arrive with Phases 8 and 10.
+
+### 17.5 Access changes while connected (§10)
+
+- The collab server subscribes to Redis `conote:events:access` on its own subscriber connection (queues commands while connecting; ioredis resubscribes after an outage). Each valid event selects the affected connections: `session.revoked` by session (or by user if no session is named), `member.removed` / `member.role_changed` / `page.access_changed` by workspace (narrowed to the user when named), `workspace.deleted` by workspace. Malformed events and events for nobody are ignored.
+- Affected connections are **re-read from PostgreSQL** (one lookup per user, session and page): unchanged → nothing; role changed → `access.changed` and read-only is switched; no access → `access.revoked`, document channel closed **and the socket closed** (4410). After revocation every further message of the connection is dropped before it is applied, even if the client keeps sending on a socket that is still closing.
+- A timer (`COLLAB_REVALIDATE_INTERVAL_MS`) repeats the check for all connections; runs do not overlap. If PostgreSQL cannot be reached during a check, connections are **kept** (the next run retries). Event delivery is at-most-once; the timer bounds how long a lost event can matter.
+
+### 17.6 Client behaviour (`apps/web/src/lib/collab-session.ts`)
+
+- Phases: `connecting` (no editor until the first sync), `live`, `offline` (editor kept; edits stay in the local document and are sent after reconnecting; a "Reconnect now" button), `unavailable` (no token: live collaboration off or API unreachable; automatic retries plus "Try again"), `denied`, `revoked`.
+- The provider reconnects by itself with backoff. A token fetch that fails during a reconnection, `TRY_AGAIN_LATER` and `RATE_LIMITED` are treated as transient: the provider is rebuilt on the **same** document after a delay, so offline edits are kept. `AUTH_FAILED` is tried once more with a new token, then the page is `denied`. `ACCESS_DENIED`, `PAGE_NOT_FOUND` and `PROTOCOL_VIOLATION` deny immediately.
+- `access.revoked`: stop for good and drop the document. Downgrade to read-only: start over on a fresh document. Upgrade to editable: `forceSync()`. See D60.4 for why.
+- The browser's "leave this page?" prompt is shown while the provider has unconfirmed changes.
+- Not done: loading a page while offline (no local persistence, no IndexedDB); this is a known limitation (§17.8).
+
+### 17.7 Limits and abuse protection (§11), as implemented
+
+`COLLAB_MAX_PAYLOAD_BYTES` (1 MiB; larger frames close the socket with 1009), `COLLAB_MAX_CONNECTIONS_PER_USER` (50), `COLLAB_MAX_CONNECTIONS` (5000), `COLLAB_MAX_MESSAGES_PER_SECOND` (100 per connection; exceeding it closes with 4429). Slots are reserved while a connection authenticates, so simultaneous attempts cannot overshoot the per-user limit (tested with ten at once). A malformed Yjs update closes that connection (library behaviour) and leaves the document unchanged. Defaults are initial values, **not** tuned by measurement.
+
+### 17.8 Known limitations and risks (Phase 6)
+
+1. **No awareness/presence** (Phase 7): client awareness state is discarded.
+2. **Single instance only** (D28); no Redis document extension.
+3. **No offline-first loading**; edits made offline survive only while the tab stays open.
+4. **Edits typed between a role change and the client learning of it** are dropped by the server; on a downgrade the client starts over, so they disappear from the viewer's copy (they were never stored).
+5. **Hocuspocus writes some errors with `console.error`** (for example a malformed update), outside the structured logger.
+6. **Idle connections:** whether the provider's message-timeout reconnects an idle but healthy connection, now that no awareness traffic flows, was not tested for longer than the test runs (a few seconds). Check this in the manual walkthrough (HANDOVER §11.8). **Update 2026-11-18:** on the owner's machine a page left idle for two minutes with no one else on it stayed "Live" (HANDOVER §11.11); longer idle periods and laptop sleep remain untested.
+7. No limit on document size beyond the 1 MiB message size and PostgreSQL; no per-document connection limit.
+8. The rate limit values and the `PAGE-10` limit (120 per minute per address) are untuned.
+9. A production reverse proxy must pass WebSocket upgrades and the `Origin` header, and the web app's Content-Security-Policy (none exists yet) must allow `connect-src` to the collab URL.
+
+### 17.9 Configuration (finalized)
+
+API: `COLLAB_JWT_PRIVATE_KEY` (JWK JSON, Ed25519, with `kid`; unset → `PAGE-10` answers 503), `COLLAB_URL` (`ws://localhost:4100`). Collab: `COLLAB_JWT_PUBLIC_KEYS` (JSON array of public JWKs; required; private material is rejected), `COLLAB_ALLOWED_ORIGINS` (default `APP_URL`), `COLLAB_REVALIDATE_INTERVAL_MS` (60000), `COLLAB_STORE_DEBOUNCE_MS` (2000), `COLLAB_STORE_MAX_DEBOUNCE_MS` (10000), `COLLAB_COMPACT_UPDATE_COUNT` (200), `COLLAB_MAX_PAYLOAD_BYTES` (1048576), `COLLAB_MAX_CONNECTIONS_PER_USER` (50), `COLLAB_MAX_CONNECTIONS` (5000), `COLLAB_MAX_MESSAGES_PER_SECOND` (100), `COLLAB_SHUTDOWN_TIMEOUT_MS` (10000). `COLLAB_AWAIT_INITIAL_SYNC_MS` is not used (no Redis document extension). `pnpm collab:keys` prints a new key pair; `node scripts/generate-collab-keys.mjs --write` (also run by `scripts/setup.sh`) adds one to `.env` only when none is there. Key rotation: add the new public key to `COLLAB_JWT_PUBLIC_KEYS`, switch the API's private key, remove the old public key after 60 s.

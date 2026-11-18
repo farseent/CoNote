@@ -1,3 +1,9 @@
+export {
+  resolveCollabAccess,
+  type CollabAccessDecision,
+  type CollabAccessDenial,
+  type CollabAccessQuery,
+} from './collab-access.js';
 export { createPrismaClient } from './client.js';
 export type { PrismaClient } from './client.js';
 export { isDatabaseUnavailableError, isUniqueConstraintError } from './errors.js';

@@ -32,7 +32,7 @@ describe('rate limiting', () => {
       config: {
         rateLimits: {
           general: RELAXED,
-          contentSave: RELAXED,
+          collabToken: RELAXED,
           assetUpload: RELAXED,
           invitation: RELAXED,
           register: RELAXED,
@@ -67,7 +67,7 @@ describe('rate limiting', () => {
       config: {
         rateLimits: {
           general: RELAXED,
-          contentSave: RELAXED,
+          collabToken: RELAXED,
           assetUpload: RELAXED,
           invitation: RELAXED,
           register: RELAXED,
@@ -100,7 +100,7 @@ describe('rate limiting', () => {
       config: {
         rateLimits: {
           general: RELAXED,
-          contentSave: RELAXED,
+          collabToken: RELAXED,
           assetUpload: RELAXED,
           invitation: RELAXED,
           login: RELAXED,
@@ -122,7 +122,7 @@ describe('rate limiting', () => {
       config: {
         rateLimits: {
           general: RELAXED,
-          contentSave: RELAXED,
+          collabToken: RELAXED,
           assetUpload: RELAXED,
           invitation: RELAXED,
           login: RELAXED,
@@ -160,7 +160,7 @@ describe('rate limiting', () => {
           password: RELAXED,
           loginAccount: RELAXED,
           general: { max: 3, timeWindowMs: MINUTE },
-          contentSave: RELAXED,
+          collabToken: RELAXED,
           assetUpload: RELAXED,
         },
       },

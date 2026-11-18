@@ -1,4 +1,5 @@
 import { collabEnvSchema, parseEnv } from '@conote/shared';
+import { createCollabConfig } from './config.js';
 import { createDependencies } from './dependencies.js';
 import { createLogger } from './logger.js';
 import { buildCollabServer } from './server.js';
@@ -9,7 +10,7 @@ async function main(): Promise<void> {
 
   const logger = createLogger({ service: 'collab', level: env.LOG_LEVEL, nodeEnv: env.NODE_ENV });
   const dependencies = createDependencies(env, logger);
-  const server = buildCollabServer({ port: env.COLLAB_PORT, logger, dependencies });
+  const collab = buildCollabServer({ config: createCollabConfig(env), logger, dependencies });
 
   let shuttingDown = false;
   const shutdown = async (signal: string): Promise<void> => {
@@ -17,7 +18,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     logger.info({ signal }, 'shutting down');
     try {
-      await server.destroy();
+      await collab.stop();
       await dependencies.close();
       process.exit(0);
     } catch (err) {
@@ -28,8 +29,7 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('SIGINT', () => void shutdown('SIGINT'));
 
-  await server.listen();
-  logger.info({ port: env.COLLAB_PORT }, 'collab server listening');
+  await collab.start();
 }
 
 main().catch((err: unknown) => {

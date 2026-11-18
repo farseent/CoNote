@@ -8,7 +8,8 @@ import tseslint from 'typescript-eslint';
  * Module boundaries (docs/ARCHITECTURE.md §5):
  *   shared -> nothing in the repo, no I/O
  *   db, editor -> shared
- *   api, collab -> shared, db
+ *   api -> shared, db
+ *   collab -> shared, db, editor (D58: seeds Yjs documents with the editor's own schema)
  *   web -> shared, editor
  * Apps never import other apps; web never imports db.
  */
@@ -140,7 +141,11 @@ export default tseslint.config(
   },
   {
     files: ['apps/collab/**/*.ts'],
-    rules: forbid(['@conote/shared', '@conote/db', '@conote/collab'], [], 'collab'),
+    rules: forbid(
+      ['@conote/shared', '@conote/db', '@conote/editor', '@conote/collab'],
+      [],
+      'collab',
+    ),
   },
   {
     files: ['apps/web/**/*.ts', 'apps/web/**/*.tsx'],

@@ -1,6 +1,6 @@
 # CoNote – REST API Contracts
 
-**Status:** Implemented: operational endpoints `GET /health` and `GET /ready` (Phase 1) and **`AUTH-01`–`AUTH-07` and `USER-01`–`USER-02` (Phase 2; see §3.1 and §4.1 for confirmed behaviour and differences from the design)**. Phase 2 decisions D41–D47 were accepted by the owner on 2026-11-13. **Phase 3 (implemented 2026-11-14; owner-verified locally 2026-11-15; decisions D48–D53 accepted by the owner on 2026-11-15): `WS-01`–`WS-09`, `INV-01`–`INV-07` (INV-07 is new), `PAGE-01`–`PAGE-09`, `PP-01`–`PP-03`, `ACT-01`–`ACT-02`; see §15 for the implemented behaviour and differences from the design.** All other endpoints (`PAGE-10`, comments, versions, assets, collaboration) remain design-only and are not implemented.
+**Status:** Implemented: operational endpoints `GET /health` and `GET /ready` (Phase 1) and **`AUTH-01`–`AUTH-07` and `USER-01`–`USER-02` (Phase 2; see §3.1 and §4.1 for confirmed behaviour and differences from the design)**. Phase 2 decisions D41–D47 were accepted by the owner on 2026-11-13. **Phase 3 (implemented 2026-11-14; owner-verified locally 2026-11-15; decisions D48–D53 accepted by the owner on 2026-11-15): `WS-01`–`WS-09`, `INV-01`–`INV-07` (INV-07 is new), `PAGE-01`–`PAGE-09`, `PP-01`–`PP-03`, `ACT-01`–`ACT-02`; see §15 for the implemented behaviour and differences from the design.** **Phase 6 (2026-11-17): `PAGE-10` is implemented (§7, notes below); `CONTENT-01`/`CONTENT-02` are removed (D59, accepted 2026-11-18); `PAGE-10` was exercised through the web editor in the owner's local verification on 2026-11-18 (HANDOVER §11.11).** Comments and versions remain design-only.
 **Last updated:** 2026-11-16
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md). Models are in [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md). Collaboration traffic (Yjs sync, awareness, application events, version create/restore) is **not** REST; see [WEBSOCKET_PROTOCOL.md](WEBSOCKET_PROTOCOL.md).
@@ -301,9 +301,12 @@ Invitation links have the form `<APP_URL>/invite#token=<token>`; the token is in
 - **Request:** `{}`.
 - **Response `200`:** `{ "token": string, "expiresAt": string, "collabUrl": string, "documentName": "page:<pageId>", "role": string, "readOnly": boolean }`.
 - **Notes:** the token is an EdDSA JWT with a 60-second lifetime (D22). `role` and `readOnly` are advisory for the UI; the collab server decides from the database.
-- **Errors:** `404` (also for deleted pages), `429`.
+- **Errors:** `404` (also for deleted pages and pages the caller cannot read, so existence is not revealed), `429`, and **`503 SERVICE_UNAVAILABLE` when no signing key is configured** (`COLLAB_JWT_PRIVATE_KEY`; readable-page checks come first, so an unreadable page still answers 404).
+- **Implemented 2026-11-17 (Phase 6):** the token has exactly the claims `iss`, `aud`, `sub`, `sid`, `pid`, `jti`, `iat`, `exp` and the header `kid`; **there is no role claim** (D60.1). `collabUrl` is `COLLAB_URL`. Rate limit `collabToken`: 120 per minute per client address (untuned). Like every `POST`, it needs the same-origin `Origin` check (D25). Test evidence: `apps/api/test/collab-token.int.test.ts` (9 tests); also used by the web editor in the owner's browser walkthrough of 2026-11-18 (HANDOVER §11.11).
 
-### 7.1 Interim page-content endpoints (`CONTENT`, Phase 4, D54)
+### 7.1 Interim page-content endpoints (`CONTENT`, Phase 4, D54) — REMOVED in Phase 6 (D59, accepted 2026-11-18)
+
+> **Removed on 2026-11-17.** `CONTENT-01` and `CONTENT-02`, the `contentSave` rate limit and the shared request/response schemas no longer exist; the document is the Yjs document. The `page_contents` table remains as a read-only seed source (D59). The text below is kept as a historical record of the Phase 4 contract.
 
 > Interim: these two endpoints exist only until Phase 6 replaces document persistence with the Yjs document store (D15). Nothing else may depend on them. Not part of the original design; recorded as D54 (accepted 2026-11-16).
 
@@ -462,4 +465,4 @@ Confirmed behaviour of the implemented endpoints, and where it adds to or differ
 - **`PAGE-09`:** `WS≥ADMIN`; `409 CONFLICT` unless the page is deleted.
 - **`PP-02`:** target must be a member (`404` otherwise); admins and the owner give `409 CANNOT_RESTRICT_ADMIN`. **`PP-03`:** `404` when no override exists.
 - **`ACT-01`/`ACT-02`:** keyset pagination `(createdAt desc, id desc)`; invalid cursor is `400 VALIDATION_ERROR`. Metadata holds ids only (no emails, tokens or titles).
-- **Not implemented:** `PAGE-10`; email delivery of invitations (D52); page search (no requirement).
+- **Not implemented:** email delivery of invitations (D52); page search (no requirement).

@@ -23,6 +23,8 @@ export function testConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
       TRUST_PROXY: [],
       SESSION_IDLE_TTL_DAYS: 7,
       SESSION_ABSOLUTE_TTL_DAYS: 30,
+      COLLAB_JWT_PRIVATE_KEY: undefined,
+      COLLAB_URL: 'ws://localhost:4100',
     }),
     rateLimits: {
       general: RELAXED,
@@ -31,7 +33,7 @@ export function testConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
       loginAccount: RELAXED,
       password: RELAXED,
       invitation: RELAXED,
-      contentSave: RELAXED,
+      collabToken: RELAXED,
       assetUpload: RELAXED,
     },
     // A fresh namespace per app keeps rate-limit counters isolated between tests.

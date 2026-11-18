@@ -1,0 +1,10 @@
+Files deleted by Phase 6 (remove them from your repository):
+apps/api/src/routes/page-content.ts
+apps/api/test/page-content.int.test.ts
+apps/collab/test/server.int.test.ts
+apps/collab/test/server.test.ts
+apps/web/src/components/editor/save-errors.ts
+apps/web/src/components/editor/save-status.tsx
+apps/web/src/lib/autosave.test.ts
+apps/web/src/lib/autosave.ts
+packages/shared/src/page-content.ts

@@ -15,6 +15,20 @@ export function createRedisClient(redisUrl: string): Redis {
   });
 }
 
+/**
+ * A connection that only subscribes. Unlike the request/response client it queues commands
+ * while connecting and retries for ever, so the subscription is restored after an outage
+ * (ioredis resubscribes automatically).
+ */
+export function createSubscriberClient(redisUrl: string): Redis {
+  return new Redis(redisUrl, {
+    maxRetriesPerRequest: null,
+    enableOfflineQueue: true,
+    connectTimeout: 2000,
+    retryStrategy: (attempt) => Math.min(attempt * 200, 5000),
+  });
+}
+
 /** Redis health check: PING with a timeout. Never throws. */
 export async function checkRedis(redis: Redis, timeoutMs = 1000): Promise<DependencyStatus> {
   let timer: NodeJS.Timeout | undefined;

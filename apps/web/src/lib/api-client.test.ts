@@ -167,19 +167,13 @@ describe('page content and image calls', () => {
   const lastCall = (fetchMock: ReturnType<typeof stub>) =>
     fetchMock.mock.calls[fetchMock.mock.calls.length - 1] as [string, RequestInit];
 
-  it('reads and saves page content as JSON', async () => {
+  it('asks for a collaboration token with an empty JSON body', async () => {
     const fetchMock = stub();
-    await api.getPageContent('p/1');
-    expect(lastCall(fetchMock)[0]).toBe('/api/v1/pages/p%2F1/content');
-    expect(lastCall(fetchMock)[1].method).toBe('GET');
-
-    const content = { type: 'doc' as const, content: [{ type: 'paragraph' }] };
-    await api.savePageContent('p1', { baseRevision: 3, content });
+    await api.createCollabToken('p/1');
     const [url, init] = lastCall(fetchMock);
-    expect(url).toBe('/api/v1/pages/p1/content');
-    expect(init.method).toBe('PUT');
-    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
-    expect(JSON.parse(init.body as string)).toEqual({ baseRevision: 3, content });
+    expect(url).toBe('/api/v1/pages/p%2F1/collab-token');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({});
   });
 
   it('sends image bytes unchanged with the announced content type', async () => {

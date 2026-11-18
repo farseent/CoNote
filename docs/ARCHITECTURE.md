@@ -1,7 +1,7 @@
 # CoNote – Architecture
 
 **Status:** Phase 1 infrastructure and **Phase 2 authentication (§10)** are implemented and locally verified by the owner. Decisions D41–D47 were accepted by the owner on 2026-11-13. The collaboration architecture, persistence model and the remaining product features remain design-only.
-**Last updated:** 2026-11-16
+**Last updated:** 2026-11-18 (Phase 6 added, §23; Phase 6 verified locally and D58–D60 accepted)
 
 Decision IDs (`D#`) and unresolved IDs (`U#`) are defined in [DECISIONS.md](DECISIONS.md). Requirement IDs (`FR-*`, `NFR-*`, `PERF-*`) are in [PROJECT_MASTER.md](PROJECT_MASTER.md). Statements marked **(to verify)** are assumptions that the Phase 1 spike or a named phase must confirm before they are relied on (collected in §18).
 
@@ -105,7 +105,7 @@ conote/
 | `db` | `shared` |
 | `editor` | `shared` |
 | `api` | `shared`, `db` |
-| `collab` | `shared`, `db` |
+| `collab` | `shared`, `db`, `editor` (D58, accepted 2026-11-18; entry point `@conote/editor/collaboration` only) |
 | `web` | `shared`, `editor` |
 
 Forbidden: apps importing from other apps; `web` importing `db`; `shared` importing anything with I/O. No circular dependencies.
@@ -527,7 +527,7 @@ Not fetched during Phase 0 (confirm when implementing):
 
 ## 22. Phase 5: Yjs binding and document store (2026-11-16)
 
-**Status:** implemented and executed in a preparation environment (HANDOVER §10.8); owner verification on the owner's machine is pending; decisions in D57.
+**Status:** implemented and executed in a preparation environment (HANDOVER §10.8); verified on the owner's machine on 2026-11-16 (HANDOVER §10.9); D57 accepted 2026-11-16.
 
 - **Client side:** `@conote/editor/collaboration` binds the Phase 4 editor to a `Y.Doc` (`createCollaborativeRegistry`), and converts between validated editor JSON and a `Y.Doc` (`contentToYDoc`, `ydocToContent`). `DocumentReplica` (`packages/shared`) separates local updates (reported to a provider) from remote ones (tagged `REMOTE_ORIGIN`, never echoed) and implements the two halves of the sync handshake: `stateVector()` (step 1) and `diffSince(vector)` (step 2). Duplicate and out-of-order updates are safe because Yjs applies updates idempotently and holds back an update whose dependencies have not arrived.
 - **Server side:** `DocumentStore` (`packages/db`) implements §8 exactly: lazy `DocumentState` row doubling as the lock; `appendDiff` writes `encodeStateAsUpdate(doc, persistedStateVector)` and sets the vector to the per-client maximum; `compact` merges rows into `foldedState` atomically; `load` rebuilds from state plus rows after `foldedSeq`.
@@ -535,3 +535,47 @@ Not fetched during Phase 0 (confirm when implementing):
 - **Seeding:** pages that only have interim `page_contents` are seeded from it once, on the server, under the page lock (`seedIfEmpty`); clients never seed.
 - **Not built (Phases 6+):** WebSocket server and provider, authorization, store hooks and debounce, compaction trigger, snapshots, presence, web wiring.
 - **Guarantee evidence:** tests exist for G1 (convergence), G2 (commit boundary) and G4 (recovery, atomic compaction); none has been run, so none of G1/G2/G4 may be described as verified yet (CLAUDE.md §4.3).
+
+## 23. Phase 6: collaboration server and live editing (2026-11-17)
+
+Decisions D58–D60 were **accepted by the owner on 2026-11-18** (DECISIONS.md); the phase was verified on the owner's machine the same day (HANDOVER §11.11). The wire-level details are in WEBSOCKET_PROTOCOL.md §17; test evidence in TESTING.md §8.0e. This section supersedes §21 where they differ: the interim content endpoints no longer exist.
+
+### 23.1 What now exists
+
+```
+Browser (Next.js page)                       API (Fastify)                  Collab (Hocuspocus 4.8)
+  CollabSession ── POST /pages/:id/collab-token ──▶ AccessService.pageAccess
+       │            ◀── 60 s EdDSA token (identity only) ── signs with the PRIVATE key
+       │
+       └── WebSocket page:<uuid> + token ───────────────────────────────▶ verify with the PUBLIC key
+             Y.Doc ⇄ TipTap (Collaboration)                                  resolveCollabAccess (PostgreSQL)
+                                                                             DocumentStore (PostgreSQL)  ◀── seed from page_contents
+                                              Redis conote:events:access ──▶ revalidate affected connections
+```
+
+- **One synchronization mechanism.** The page's content is the Yjs document and nothing else. The Phase 4 HTTP save (`CONTENT-01/02`), its autosave controller, revision conflicts and the "saved/conflict" UI are removed (D59). The editor has no save step; the indicator says Live, Syncing… or Offline.
+- **Authorization is repeated where the data is.** The API checks that a token may be issued (`PAGE-10`); the collab server verifies the token and **decides the role itself from PostgreSQL** on every connection, on access events and on a timer. The token has no role. The frontend's `canEdit` and the editor's `editable` are hints; the server refuses writes of read-only connections whatever the client does.
+- **Keys.** The API holds the Ed25519 private key, the collab server only public keys (a compromised collab server cannot mint tokens); `kid` allows rotation (WEBSOCKET_PROTOCOL §17.9).
+- **Persistence.** Unchanged store design (D15, D57): debounced `appendDiff`, compaction on count and on unload. Added in Phase 6: retry of failed stores, flush before shutdown, seeding on first open, and dropping the state of a page that no longer exists.
+- **Boundaries.** `collab → editor` is allowed through `@conote/editor/collaboration` only (D58). `apps/collab/src` modules: `config`, `token-verifier`, `connection-registry`, `access-control`, `access-events`, `revalidation`, `persistence`, `wire-messages`, `server` (hooks and shutdown), `main`. `apps/web/src/lib`: `collab-session` (framework-free) and `use-collab-session`.
+
+### 23.2 Flows
+
+- **Open a page:** token request → connect → verify token → read session, page, membership and overrides from PostgreSQL → load or seed the document → sync → `live`. Any failure is a refusal reason (WEBSOCKET_PROTOCOL §17.1) and nothing is loaded.
+- **Edit:** the editor writes to the local `Y.Doc`; the provider sends the update; the server checks that the connection may write, applies and broadcasts it; the store writes after the debounce. A client cannot know the write is stored.
+- **Access removed while connected:** the API commits and publishes an access event; the collab server re-reads the database for the affected connections, sends `access.revoked`, closes the document channel and the socket, and drops anything the client still sends. If the event is lost, the periodic revalidation finds it.
+- **Network drop:** the provider reconnects with backoff and a **new token**; the Yjs sync exchange sends what each side lacks; edits made offline on both sides merge (tests: single drop, five drops in a row, long absence).
+- **Server restart:** graceful (stores everything, tells clients, 1012) or crash (clients still hold unstored changes and resend them). Clients reconnect to the restarted server and converge.
+
+### 23.3 Failure modes added
+
+| Failure | Behaviour |
+|---|---|
+| PostgreSQL down at connect | refusal `TRY_AGAIN_LATER`; the client keeps its document and retries |
+| PostgreSQL down at store | document stays in memory; retried 1, 2, 5, 10, 30 s; process stays up |
+| PostgreSQL down during revalidation | connections kept; next run retries |
+| Redis down | access events missed; revalidation timer still applies; subscription restored by ioredis |
+| Collab down | clients show Offline, keep edits, reconnect when it returns |
+| API down | existing connections continue; reconnection needs a token, so it waits |
+| Collaboration key not configured on the API | `PAGE-10` answers 503; the editor shows "could not be opened" |
+| Page or workspace deleted while open | connections revoked; the document is dropped |

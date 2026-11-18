@@ -24,6 +24,8 @@ const violations: [string, string, string][] = [
   ['api must not import collab', 'apps/api/src/x.ts', "import '@conote/collab';\n"],
   ['api must not import web', 'apps/api/src/x.ts', "import '@conote/web';\n"],
   ['collab must not import api', 'apps/collab/src/x.ts', "import '@conote/api';\n"],
+  ['editor must not import collab', 'packages/editor/src/x.ts', "import '@conote/collab';\n"],
+  ['api must not import editor', 'apps/api/src/x.ts', "import '@conote/editor';\n"],
   ['db must not import api', 'packages/db/src/x.ts', "import '@conote/api';\n"],
   ['editor must not import db', 'packages/editor/src/x.ts', "import '@conote/db';\n"],
   ['shared must not import db', 'packages/shared/src/x.ts', "import '@conote/db';\n"],
@@ -43,6 +45,7 @@ const allowed: [string, string, string][] = [
     'apps/collab/src/x.ts',
     "import '@conote/shared';\nimport '@conote/db';\n",
   ],
+  ['collab may import editor (D58)', 'apps/collab/src/x.ts', "import '@conote/editor';\n"],
   ['web may import shared', 'apps/web/src/x.ts', "import '@conote/shared';\n"],
   ['db may import shared', 'packages/db/src/x.ts', "import '@conote/shared';\n"],
 ];

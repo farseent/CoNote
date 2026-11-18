@@ -1,6 +1,8 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { freePort, requireInfraEnv } from './helpers.js';
+// @ts-expect-error plain .mjs script without types
+import { generateCollabKeyPair } from '../scripts/generate-collab-keys.mjs';
 
 const infra = requireInfraEnv();
 
@@ -122,7 +124,12 @@ describe('real process startup and graceful shutdown', () => {
 
   it('collab starts, serves /health and /ready, and shuts down', async () => {
     const port = await freePort();
-    const { child, logs, closed } = start('apps/collab/src/main.ts', { COLLAB_PORT: String(port) });
+    const keys = generateCollabKeyPair() as { COLLAB_JWT_PUBLIC_KEYS: string };
+    const { child, logs, closed } = start('apps/collab/src/main.ts', {
+      COLLAB_PORT: String(port),
+      APP_URL: 'http://localhost:3000',
+      COLLAB_JWT_PUBLIC_KEYS: keys.COLLAB_JWT_PUBLIC_KEYS,
+    });
     try {
       const health = await waitForOk(`http://127.0.0.1:${port}/health`);
       expect(await health.json()).toEqual({ status: 'ok', service: 'collab' });

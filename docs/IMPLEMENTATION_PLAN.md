@@ -258,7 +258,7 @@ AC-1.8 is met at spike level. AC-1.9 remains partial pending item-by-item review
 
 ## Phase 5 – Yjs CRDT Integration
 
-**Status (2026-11-16):** implemented and executed in a preparation environment: 802 tests pass (unit and integration), typecheck and lint clean. Owner verification on the owner's machine is pending. See HANDOVER §10.8 for the per-criterion status and the fixes this run needed.
+**Status (2026-11-16):** implemented and executed in a preparation environment: 802 tests pass (unit and integration), typecheck and lint clean. Verified on the owner's machine on 2026-11-16 (HANDOVER §10.9: 802 tests, no defects); D57 accepted. See HANDOVER §10.8 for the per-criterion status and the fixes the preparation run needed.
 
 **Objectives:** Bind the editor to Yjs and build the durable document store as a tested library, proving G1, G2 and G4 **without any network server**.
 
@@ -296,6 +296,8 @@ AC-1.8 is met at spike level. AC-1.9 remains partial pending item-by-item review
 ---
 
 ## Phase 6 – WebSocket Server and Real-Time Collaboration
+
+**Status (2026-11-18):** implemented 2026-11-17, executed in a preparation environment (878 tests) and verified on the owner's machine on 2026-11-18 (HANDOVER §11.11: install, lint, format check, typecheck, 878 tests, and a manual real-browser walkthrough); D58–D60 accepted 2026-11-18; final owner acceptance pending. Against the criteria: AC-6.1 to AC-6.9 are covered by automated tests that pass on the owner's machine (TESTING §8.0e); the main behaviours (live sync between two browsers, Viewer downgrade, removal while open, collab restart, browser offline, a Phase 4 page, a two-minute idle) were also checked by hand (the revocation delay of AC-6.7 was observed, not measured in seconds). AC-6.10 is **not met**: no PERF-01 or PERF-05 baseline was measured (HANDOVER §11.5). AC-6.11 is **not separately recorded**: the behaviours are exercised by the tests, but no item-by-item resolution of V1, V5, V6, V11 and V13 was written down. Automated browser E2E (Playwright) was not written; the two-browser evidence is the jsdom tests plus the owner's manual run.
 
 **Objectives:** A production-quality single-instance collaboration server with authentication, authorization, persistence, recovery, revocation and reconnection.
 
