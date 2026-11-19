@@ -1,5 +1,5 @@
 import type { Connection } from '@hocuspocus/server';
-import type { EffectivePageRole } from '@conote/shared';
+import type { EffectivePageRole, PresenceIdentity } from '@conote/shared';
 
 /**
  * What the server knows about one open document connection (docs/WEBSOCKET_PROTOCOL.md §4).
@@ -29,12 +29,24 @@ export interface CollabContext {
   droppedWrites: number;
   /** Releases the connection-limit reservation made while authenticating. */
   release: (() => void) | undefined;
+  /**
+   * Who this connection is shown as: built from PostgreSQL when it opened, never from client
+   * messages (D61). A profile change shows after the next connection.
+   */
+  identity: PresenceIdentity;
+  /** The one awareness client id this connection may publish presence for (D61). */
+  awarenessClientId: number | null;
+  /** Awareness rate limiting window (see `PresenceGuard`). */
+  awarenessWindowStartedAt: number;
+  awarenessWindowCount: number;
+  /** Awareness messages and states dropped so far, for logs. */
+  awarenessDropped: number;
 }
 
 export function createContext(
   input: Pick<
     CollabContext,
-    'userId' | 'sessionId' | 'pageId' | 'workspaceId' | 'role' | 'readOnly' | 'tokenId'
+    'userId' | 'sessionId' | 'pageId' | 'workspaceId' | 'role' | 'readOnly' | 'tokenId' | 'identity'
   >,
   now: number,
 ): CollabContext {
@@ -48,6 +60,10 @@ export function createContext(
     violations: 0,
     droppedWrites: 0,
     release: undefined,
+    awarenessClientId: null,
+    awarenessWindowStartedAt: now,
+    awarenessWindowCount: 0,
+    awarenessDropped: 0,
   };
 }
 
@@ -60,6 +76,8 @@ export class ConnectionRegistry {
   /** Connections that passed authentication but are not registered yet (closes a race on limits). */
   private reservedTotal = 0;
   private readonly reservedPerUser = new Map<string, number>();
+  /** Which connection owns which awareness client id, per page (D61). */
+  private readonly awarenessOwners = new Map<string, CollabContext>();
 
   get size(): number {
     return this.all.size;
@@ -102,10 +120,53 @@ export class ConnectionRegistry {
   }
 
   remove(context: CollabContext): void {
+    this.releaseAwareness(context);
     if (!this.all.delete(context)) return;
     const left = this.countForUser(context.userId) - 1;
     if (left <= 0) this.perUser.delete(context.userId);
     else this.perUser.set(context.userId, left);
+  }
+
+  /**
+   * Bind `clientId` (a Yjs awareness client id) to `context`, the only connection allowed to
+   * publish presence under it. A connection owns at most one id. An id that another
+   * connection of the same page holds is refused, unless that connection belongs to the same
+   * user: a reconnecting client keeps its Yjs client id, and the connection it left behind
+   * may linger until the server notices it is dead, so the new one takes over.
+   *
+   * Returns `{ ok, previous }`: `previous` is the connection that lost the id to a takeover.
+   */
+  claimAwareness(
+    context: CollabContext,
+    clientId: number,
+  ): { ok: boolean; previous: CollabContext | null } {
+    if (context.awarenessClientId !== null)
+      return { ok: context.awarenessClientId === clientId, previous: null };
+    const key = `${context.pageId}:${clientId}`;
+    const owner = this.awarenessOwners.get(key);
+    if (owner !== undefined && owner !== context) {
+      if (owner.userId !== context.userId) return { ok: false, previous: null };
+      owner.awarenessClientId = null;
+      this.awarenessOwners.set(key, context);
+      context.awarenessClientId = clientId;
+      return { ok: true, previous: owner };
+    }
+    this.awarenessOwners.set(key, context);
+    context.awarenessClientId = clientId;
+    return { ok: true, previous: null };
+  }
+
+  /** True when `context` owns `clientId` (so it may remove that presence). */
+  ownsAwareness(context: CollabContext, clientId: number): boolean {
+    return context.awarenessClientId === clientId;
+  }
+
+  private releaseAwareness(context: CollabContext): void {
+    const clientId = context.awarenessClientId;
+    if (clientId === null) return;
+    const key = `${context.pageId}:${clientId}`;
+    if (this.awarenessOwners.get(key) === context) this.awarenessOwners.delete(key);
+    context.awarenessClientId = null;
   }
 
   snapshot(): CollabContext[] {

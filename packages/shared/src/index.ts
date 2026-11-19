@@ -10,5 +10,6 @@ export * from './health.js';
 export * from './logging.js';
 export * from './page-position.js';
 export * from './permissions.js';
+export * from './presence.js';
 export * from './workspaces.js';
 export * from './yjs.js';

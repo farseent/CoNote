@@ -1,7 +1,7 @@
 # CoNote – Architecture
 
 **Status:** Phase 1 infrastructure and **Phase 2 authentication (§10)** are implemented and locally verified by the owner. Decisions D41–D47 were accepted by the owner on 2026-11-13. The collaboration architecture, persistence model and the remaining product features remain design-only.
-**Last updated:** 2026-11-18 (Phase 6 added, §23; Phase 6 verified locally and D58–D60 accepted)
+**Last updated:** 2026-11-19 (Phase 6 added, §23; Phase 6 verified locally and D58–D60 accepted; Phase 7 presence, awareness §6/§18 of WEBSOCKET_PROTOCOL, verified locally by the owner on 2026-11-19 and D61 accepted)
 
 Decision IDs (`D#`) and unresolved IDs (`U#`) are defined in [DECISIONS.md](DECISIONS.md). Requirement IDs (`FR-*`, `NFR-*`, `PERF-*`) are in [PROJECT_MASTER.md](PROJECT_MASTER.md). Statements marked **(to verify)** are assumptions that the Phase 1 spike or a named phase must confirm before they are relied on (collected in §18).
 
@@ -151,7 +151,7 @@ CoNote uses diffs against a persisted state vector (§8) and full-state encoding
 
 ### 7.3 Awareness
 
-Awareness (cursor, selection, user name and color) is ephemeral per-client state exchanged through the Yjs awareness protocol. It is never written to PostgreSQL. By default (y-protocols) an unrefreshed client state expires after a timeout **(to verify: values)**, which also cleans up after crashed clients. Presence UI (Phase 7) is derived from awareness; join/leave notifications come from awareness changes.
+Awareness (cursor, selection, user name and color) is ephemeral per-client state exchanged through the Yjs awareness protocol. It is never written to PostgreSQL. An unrefreshed client state expires after 30 s (a constant of y-protocols 1.0.7, checked every 3 s; clients renew every 15 s), which also cleans up after crashed clients. The server rebuilds every relayed state from the verified identity and a validated cursor (Phase 7, D61, WEBSOCKET_PROTOCOL §18); presence UI is derived from awareness, and join/leave notices from awareness changes.
 
 ### 7.4 Tiptap integration
 
@@ -472,7 +472,7 @@ Hocuspocus hook payloads use web-standard `Request`/`Headers` since v4; document
 | V11 | WebSocket message size limits and connection-limit mechanisms in Hocuspocus 4 | Phase 6 / 9 |
 | V12 | Client-to-server stateless messages: handler hook availability and payload semantics in 4.8 | Phase 1 spike / Phase 6 |
 | V13 | Close-event codes the Hocuspocus provider surfaces for auth failures and custom closes | Phase 1 spike / Phase 6 |
-| V14 | Server-side enforcement of awareness identity (rejecting or rewriting awareness states whose user id differs from the authenticated user) | Phase 1 spike / Phase 7 |
+| V14 | Server-side enforcement of awareness identity (rejecting or rewriting awareness states whose user id differs from the authenticated user) | Phase 1 spike / **Phase 7 (D61, accepted 2026-11-19):** the server stamps id, name and colour; forged identity is tested against the real server (HANDOVER §12.3); the owner verified presence in real browsers on 2026-11-19 (§12.11) |
 
 ### 18.1 Hocuspocus 4.8.0 source/API inspection (distinct from runtime verification)
 

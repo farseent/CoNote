@@ -9,7 +9,16 @@ const W1 = '00000000-0000-4000-8000-0000000000a1';
 const W2 = '00000000-0000-4000-8000-0000000000a2';
 const ctx = (userId: string, workspaceId: string, sessionId = userId) =>
   createContext(
-    { userId, sessionId, pageId: 'p', workspaceId, role: 'EDITOR', readOnly: false, tokenId: 't' },
+    {
+      userId,
+      sessionId,
+      pageId: 'p',
+      workspaceId,
+      role: 'EDITOR',
+      readOnly: false,
+      tokenId: 't',
+      identity: { id: userId, name: 'Test', color: '#4F46E5' },
+    },
     0,
   );
 
@@ -124,5 +133,52 @@ describe('classifyInbound', () => {
         classifyInbound(Uint8Array.from(bytes)),
       );
     }
+  });
+});
+
+describe('ConnectionRegistry awareness ownership (D61)', () => {
+  it('lets a connection own one client id and refuses others', () => {
+    const r = new ConnectionRegistry();
+    const a = ctx(U1, W1);
+    expect(r.claimAwareness(a, 7)).toEqual({ ok: true, previous: null });
+    expect(r.claimAwareness(a, 7).ok).toBe(true);
+    expect(r.claimAwareness(a, 8).ok).toBe(false);
+    expect(r.ownsAwareness(a, 7)).toBe(true);
+    expect(r.ownsAwareness(a, 8)).toBe(false);
+  });
+
+  it("refuses a client id that another user's connection holds on the same page", () => {
+    const r = new ConnectionRegistry();
+    const a = ctx(U1, W1);
+    const b = ctx(U2, W1);
+    r.claimAwareness(a, 7);
+    expect(r.claimAwareness(b, 7)).toEqual({ ok: false, previous: null });
+    expect(b.awarenessClientId).toBeNull();
+    expect(a.awarenessClientId).toBe(7);
+  });
+
+  it('lets a reconnection of the same user take the id over from its stale connection', () => {
+    const r = new ConnectionRegistry();
+    const stale = ctx(U1, W1);
+    const fresh = ctx(U1, W1);
+    r.claimAwareness(stale, 7);
+    expect(r.claimAwareness(fresh, 7)).toEqual({ ok: true, previous: stale });
+    expect(stale.awarenessClientId).toBeNull();
+    // The stale connection closing later must not release the new owner's claim.
+    r.add(stale);
+    r.remove(stale);
+    expect(r.ownsAwareness(fresh, 7)).toBe(true);
+    expect(r.claimAwareness(ctx(U2, W1), 7).ok).toBe(false);
+  });
+
+  it('keeps ids of different pages apart and frees the id when the connection goes', () => {
+    const r = new ConnectionRegistry();
+    const a = ctx(U1, W1);
+    const other = { ...ctx(U2, W1), pageId: 'other' };
+    r.add(a);
+    r.claimAwareness(a, 7);
+    expect(r.claimAwareness(other, 7).ok).toBe(true);
+    r.remove(a);
+    expect(r.claimAwareness(ctx(U2, W1), 7).ok).toBe(true);
   });
 });

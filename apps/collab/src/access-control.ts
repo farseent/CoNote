@@ -9,6 +9,7 @@ import {
   COLLAB_CLOSE,
   canEditPage,
   encodeServerMessage,
+  normalizePresenceColor,
   pageIdFromDocumentName,
   type AccessRevokedReason,
 } from '@conote/shared';
@@ -118,6 +119,12 @@ export class AccessController {
               : 'ACCESS_DENIED',
         );
       }
+      // Who the connection is shown as comes from the database, never from the client (D61).
+      const person = await this.prisma.user.findUnique({
+        where: { id: claims.sub },
+        select: { displayName: true, presenceColor: true },
+      });
+      if (person === null) throw refuse('AUTH_FAILED');
       const context = createContext(
         {
           userId: claims.sub,
@@ -127,6 +134,11 @@ export class AccessController {
           role: decision.role,
           readOnly: !canEditPage(decision.role),
           tokenId: claims.jti,
+          identity: {
+            id: claims.sub.toLowerCase(),
+            name: person.displayName,
+            color: normalizePresenceColor(person.presenceColor),
+          },
         },
         this.clock().getTime(),
       );

@@ -2,6 +2,7 @@ import { getSchema } from '@tiptap/core';
 import { Collaboration } from '@tiptap/extension-collaboration';
 import { Node as ProseMirrorNode, type Schema } from '@tiptap/pm/model';
 import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON } from '@tiptap/y-tiptap';
+import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
 import {
   YJS_FRAGMENT_NAME,
@@ -11,6 +12,7 @@ import {
   type EditorDocument,
 } from '@conote/shared';
 import type { BaseExtensionOptions } from './extensions.js';
+import { createPresenceCaret, type PresenceCaretOptions } from './presence-caret.js';
 import { createDefaultRegistry, type ExtensionRegistry } from './registry.js';
 
 /*
@@ -29,12 +31,29 @@ export { YJS_FRAGMENT_NAME };
  */
 export function createCollaborativeRegistry(
   document: Y.Doc,
-  options: BaseExtensionOptions = {},
+  options: BaseExtensionOptions & {
+    /**
+     * The connection's awareness (Phase 7). When given, collaborators' carets and selections
+     * are drawn and this editor's cursor is published through it. Presence is separate from
+     * the document: it is never stored (WEBSOCKET_PROTOCOL §18).
+     */
+    awareness?: Awareness;
+    presence?: PresenceCaretOptions;
+  } = {},
 ): ExtensionRegistry {
-  return createDefaultRegistry({ ...options, undoRedo: false }).register({
+  const { awareness, presence, ...base } = options;
+  const registry = createDefaultRegistry({ ...base, undoRedo: false }).register({
     id: 'collaboration',
     extensions: [Collaboration.configure({ document, field: YJS_FRAGMENT_NAME })],
   });
+  // After Collaboration: the cursor plugin reads the Yjs sync plugin's state.
+  if (awareness) {
+    registry.register({
+      id: 'presence-caret',
+      extensions: [createPresenceCaret(awareness, presence)],
+    });
+  }
+  return registry;
 }
 
 export class InvalidEditorContentError extends Error {

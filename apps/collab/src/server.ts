@@ -17,6 +17,7 @@ import type { Clock, CollabConfig } from './config.js';
 import { ConnectionRegistry, type CollabContext } from './connection-registry.js';
 import type { Dependencies } from './dependencies.js';
 import { DocumentPersistence, type PersistenceOptions } from './persistence.js';
+import { PresenceGuard } from './presence.js';
 import { PeriodicRevalidation } from './revalidation.js';
 import { TokenVerifier } from './token-verifier.js';
 import { classifyInbound } from './wire-messages.js';
@@ -43,6 +44,7 @@ export interface CollabServer {
   readonly persistence: DocumentPersistence;
   readonly events: AccessEventListener;
   readonly revalidation: PeriodicRevalidation;
+  readonly presence: PresenceGuard;
   /** Port actually bound (useful with port 0). */
   readonly port: number;
   start(): Promise<void>;
@@ -96,6 +98,9 @@ export function buildCollabServer(options: BuildServerOptions): CollabServer {
     config.revalidateIntervalMs,
     logger,
   );
+  const presence = new PresenceGuard(registry, clock, logger, {
+    maxAwarenessPerSecond: config.maxAwarenessPerSecond,
+  });
   const allowedOrigins = new Set(config.allowedOrigins);
   let stopping = false;
 
@@ -206,12 +211,15 @@ export function buildCollabServer(options: BuildServerOptions): CollabServer {
     },
 
     /**
-     * Presence is Phase 7. Until its identity binding exists the server accepts no client
-     * supplied awareness state at all: nothing a client puts there is stored or relayed.
-     * (Removing a disconnected client's state is done by the library itself.)
+     * Presence (Phase 7, WEBSOCKET_PROTOCOL §18). Awareness is client-supplied and untrusted:
+     * `PresenceGuard` rebuilds every relayed state from the connection's server-built identity
+     * and the validated cursor, and binds each connection to its own awareness client id.
+     * Nothing here is stored: awareness never reaches `DocumentStore`.
      */
-    async beforeHandleAwareness({ states }) {
-      states.clear();
+    async beforeHandleAwareness({ context, document, states, removedClients }) {
+      if (context === undefined) return; // not from a client connection
+      if (context.revoked) throw new Error('connection revoked');
+      presence.apply({ context, document, states, removedClients });
     },
 
     /** Application messages (WEBSOCKET_PROTOCOL §7). Phase 6 registers no client commands. */
@@ -321,6 +329,7 @@ export function buildCollabServer(options: BuildServerOptions): CollabServer {
     persistence,
     events,
     revalidation,
+    presence,
     get port() {
       return server.address.port;
     },

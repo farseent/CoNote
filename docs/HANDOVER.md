@@ -1,6 +1,8 @@
 # CoNote – Handover
 
-**Last updated:** 2026-11-18 (**Phase 6 implemented 2026-11-17, executed in a preparation environment, and verified on the owner's machine on 2026-11-18 (§11.11): install, lint, format check, typecheck, 878 tests and a manual real-browser walkthrough passed; D58–D60 accepted**). Earlier: 2026-11-17 (Phase 6 implemented and executed in a preparation environment only); 2026-11-16 (Phase 5 implemented, executed in a preparation environment and verified on the owner's machine; D57 accepted; Phase 4 accepted by the owner on 2026-11-16 — the older "final acceptance pending" wording below is superseded)
+**Last updated:** 2026-11-19 (**Phase 7 owner-verified locally on 2026-11-19 (§12.11) and D61 accepted; Phase 7 implemented 2026-11-18, see the Phase 7 paragraph below. Phase 6 implemented 2026-11-17, executed in a preparation environment, and verified on the owner's machine on 2026-11-18 (§11.11): install, lint, format check, typecheck, 878 tests and a manual real-browser walkthrough passed; D58–D60 accepted**). Earlier: 2026-11-17 (Phase 6 implemented and executed in a preparation environment only); 2026-11-16 (Phase 5 implemented, executed in a preparation environment and verified on the owner's machine; D57 accepted; Phase 4 accepted by the owner on 2026-11-16 — the older "final acceptance pending" wording below is superseded)
+
+**Phase 7 (2026-11-18):** Presence and Collaborative UI is implemented and was executed in a preparation environment (§12.8): 55 files, 966 tests passing there (baseline 878), lint and typecheck clean. **Verified on the owner's machine and in real browsers on 2026-11-19 (§12.11): install, package build, lint, format check, typecheck, the full test run (965 of 966 tests passed; the one failure is a Phase 6 persistence test that is flaky under load and passed 4 of 4 times alone) and the whole owner checklist (§12.7) in real browsers. D61 was accepted on 2026-11-19.** Not done: final Phase 7 acceptance, Docker, GitHub Actions, long idle runs. Stopped after Phase 7 as instructed. Read §12.4 (findings), §12.7 (owner checklist) and §12.11 (verification) first.
 
 **Current phase: Phase 6 – WebSocket Server and Real-Time Collaboration. Implemented and executed in a preparation environment on 2026-11-17 (§11.8: 878 tests passing there) and verified on the owner's machine on 2026-11-18 (§11.11): install, migrate status, lint, format check, typecheck, 878 tests on Node 24.18.0 and PostgreSQL 17, and a manual walkthrough in real browsers (live editing, read-only and revoked access, collab restart, browser offline, a Phase 4 page, a two-minute idle). One problem was found: two superseded Phase 1 collab test files had not been deleted and broke typecheck until they were. D58–D60 accepted on 2026-11-18. Not done: final Phase 6 acceptance, Docker, GitHub Actions, load and multi-instance tests. Stop after Phase 6 as instructed.** The Phase 5 status follows: **Phase 5 – Yjs CRDT Integration. Implemented, executed in a preparation environment (§10.8: 802 tests, defects fixed) and verified on the owner's machine on 2026-11-16 (§10.9): install, Prisma migrate deploy/status and drift check, lint, format check, typecheck, 802 tests on Node 24.18.0 and PostgreSQL 17, and a real SIGKILL restart check all passed. D57 accepted on 2026-11-16. Phase 5 is a library and database phase: the web editor still uses the interim autosave (D54) and there is no provider, server or browser collaboration until Phase 6. Not done: final Phase 5 acceptance, Docker, GitHub Actions.**
 
@@ -10,7 +12,9 @@
 
 **Next step:** the owner records final acceptance of Phase 3 and Phase 4 (and the open Phase 2 sign-off); decides the production storage backend (U7: S3-compatible adapter, MinIO, avatar upload) before deployment; optionally runs the Docker `apps` profile (with a volume for `ASSET_STORAGE_DIR`) and GitHub Actions; then Phase 5 – Yjs CRDT Integration. **(Superseded: Phase 4 was accepted on 2026-11-16, Phase 5 was implemented and verified locally on 2026-11-16, and D57 was accepted. Next: the owner records final Phase 5 acceptance and runs GitHub Actions on the Phase 5 change (new dependencies and lockfile); then Phase 6 – Hocuspocus server and provider, which starts with the `collab → editor` boundary decision, D57 consequence (a).)**
 
-**Next step (current, 2026-11-18):** the owner records final acceptance of Phase 6 (and the earlier open sign-offs); decides what happens to the read-only `page_contents` table (D59 leaves dropping it open); runs the Docker `apps` profile (the collab container needs the new collaboration variables, §11.6) and GitHub Actions on the Phase 6 change (the lockfile was regenerated and has not run on a clean runner); then Phase 7 – Presence and Collaborative UI. The two deleted Phase 1 collab test files must be part of the commit (§11.9).
+**Next step (2026-11-18, superseded by the paragraph below):** the owner records final acceptance of Phase 6 (and the earlier open sign-offs); decides what happens to the read-only `page_contents` table (D59 leaves dropping it open); runs the Docker `apps` profile (the collab container needs the new collaboration variables, §11.6) and GitHub Actions on the Phase 6 change (the lockfile was regenerated and has not run on a clean runner); then Phase 7 – Presence and Collaborative UI. The two deleted Phase 1 collab test files must be part of the commit (§11.9).
+
+**Next step (current, 2026-11-19):** the owner records final acceptance of Phase 7 (and the earlier open sign-offs, Phases 2–6); decides what happens to the read-only `page_contents` table (D59 leaves dropping it open); runs the Docker `apps` profile and GitHub Actions on the Phase 5–7 changes (the lockfile changes have not run on a clean runner); optionally makes the flaky Phase 6 test wait for its counter (§12.11); then Phase 8 – Comments and Version History.
 
 Read `CLAUDE.md` first. This file is the source of truth for current project status.
 
@@ -22,11 +26,11 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 
 | Repository | pnpm monorepo with `apps/web`, `apps/api`, `apps/collab`, `packages/db`, `packages/shared`, `packages/editor`; root scripts, CI, Dockerfiles and local Compose configuration are present |
 
-| Product features | **Implemented but unverified (Phase 3): workspaces, membership and roles, invitations (link-based), nested pages, soft delete/restore/purge, page-level permissions, activity log, and the web UI for all of these (§8).** **Implemented (Phase 2): registration, login, logout, DB-backed sessions, session list/revoke, password change, profile (display name, presence colour) with web pages.** **Implemented, owner-verified locally 2026-11-16 (Phase 4): single-user rich-text editor (headings, bold/italic/underline, lists, checklists, links, tables, images, alignment, slash commands, toolbar) with interim autosave persistence and image upload (§9).** **Implemented, owner-verified locally 2026-11-18 (Phase 6): real-time collaborative editing through the Hocuspocus server (live sync, read-only roles, revocation, reconnection); the interim autosave is removed (§11).** Not implemented: presence, comments, version history, avatar upload (still open from Phase 4), email verification, password reset |
+| Product features | **Implemented but unverified (Phase 3): workspaces, membership and roles, invitations (link-based), nested pages, soft delete/restore/purge, page-level permissions, activity log, and the web UI for all of these (§8).** **Implemented (Phase 2): registration, login, logout, DB-backed sessions, session list/revoke, password change, profile (display name, presence colour) with web pages.** **Implemented, owner-verified locally 2026-11-16 (Phase 4): single-user rich-text editor (headings, bold/italic/underline, lists, checklists, links, tables, images, alignment, slash commands, toolbar) with interim autosave persistence and image upload (§9).** **Implemented, owner-verified locally 2026-11-18 (Phase 6): real-time collaborative editing through the Hocuspocus server (live sync, read-only roles, revocation, reconnection); the interim autosave is removed (§11).** **Implemented, owner-verified locally 2026-11-19 (Phase 7): presence — avatar stack, online list, collaborator carets and selections, join/leave notices; nothing is stored (§12).** Not implemented: comments, version history, avatar upload (still open from Phase 4), email verification, password reset |
 
 | API | Fastify foundation, `/health` and `/ready`, (Phase 2) `AUTH-01`–`AUTH-07`, `USER-01`–`USER-02`, and (Phase 3, unverified) `WS-01`–`WS-09`, `INV-01`–`INV-07`, `PAGE-01`–`PAGE-09`, `PP-01`–`PP-03`, `ACT-01`–`ACT-02` and, (Phase 4, owner-verified locally) `ASSET-01`–`ASSET-04` (the interim `CONTENT-01`–`CONTENT-02` were removed in Phase 6, D59) and, Phase 6, `PAGE-10` under `/api/v1`, with CSRF checks, rate limiting, helmet, CORS, session cleanup job |
 
-| Collaboration server | **Phase 6 (2026-11-17; executed in a preparation environment, owner-verified locally 2026-11-18, §11.11):** Hocuspocus server with collaboration-token verification, database-derived roles, read-only enforcement, access events and periodic revalidation, store retry, graceful shutdown and limits; the web editor is connected to it. Single instance, no presence (Phase 7). Before Phase 6 it was a shell that rejected every connection (D38) |
+| Collaboration server | **Phase 6 (2026-11-17; executed in a preparation environment, owner-verified locally 2026-11-18, §11.11):** Hocuspocus server with collaboration-token verification, database-derived roles, read-only enforcement, access events and periodic revalidation, store retry, graceful shutdown and limits; the web editor is connected to it. Single instance. **Phase 7 (2026-11-18; owner-verified locally 2026-11-19, §12.11):** presence — the server stamps the relayed identity, binds one awareness client id to each connection, keeps only a validated cursor, rate-limits awareness and never stores it (D61). Before Phase 6 it was a shell that rejected every connection (D38) |
 
 | Database | Prisma 7.10.1; baseline migration, `20261112120000_auth_users_sessions` (`User`, `Session`) and, `20261114090000_workspaces_pages_permissions` (Phase 3 models, hand-written SQL incl. the deferred one-owner trigger). **Phase 4 adds `20261115120000_editor_content_assets` (`page_contents` — interim — and `assets`, hand-written SQL; §9); the owner's `migrate deploy`, `migrate status` and scratch-database drift check were clean on 2026-11-16 (§9.11).** That migration is hand-written SQL. The owner's local `migrate deploy`, `migrate status` and scratch-database `migrate:dev` drift check were clean on 2026-11-13 (§7.9). **Phase 5 adds `20261116120000_yjs_document_store` (`document_states`, `document_updates`; hand-written SQL; §10); the owner's `migrate deploy`, `migrate status` and scratch-database drift check were clean on 2026-11-16 (§10.9).** The web app still persists content only through the interim `page_contents` table (D54); the Yjs `DocumentStore` exists and is tested but nothing in the apps calls it until Phase 6 **(superseded by Phase 6, D59: the collab server now stores documents through the `DocumentStore`, the HTTP autosave is gone and `page_contents` is a read-only seed source)** |
 
@@ -44,6 +48,8 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 
 | Phase 6 | **Implemented 2026-11-17; owner-verified locally 2026-11-18.** `pnpm install`, `migrate status`, lint, format check and typecheck pass (typecheck only after deleting the two superseded Phase 1 collab test files); 878 tests pass (49 files, `--testTimeout=30000`); manual real-browser walkthrough passed (live editing between two browsers, Viewer and removal while a page is open, collab restart, browser offline, a Phase 4 page, two-minute idle). D58–D60 accepted 2026-11-18. **Not done:** final owner acceptance, Docker, CI, load and multi-instance tests, automated browser E2E. **Not reported:** a third browser, inspection of the collab log, the revocation delay in seconds. See §11 and §11.11. |
 
+| Phase 7 | **Implemented 2026-11-18; owner-verified locally 2026-11-19.** `pnpm install`, `pnpm build:packages`, lint, format check and typecheck pass; the full test run reached 55 files and 965 of 966 tests (`--testTimeout=30000`, 257.73 s), the single failure being a Phase 6 persistence test in `apps/collab/test/sync.int.test.ts` that is flaky under load (passed 4 of 4 times alone); API, collab and web started and login worked; the owner checklist (§12.7 items 2–7) was checked in real browsers and reported working. D61 accepted 2026-11-19. **Not done:** final owner acceptance, Docker, CI, long idle runs, automated browser E2E. See §12 and §12.11. |
+
 ### Decisions and open items
 
 - **D33:** Owner selected Phase 1b before Phase 2. D33 is recorded as accepted.
@@ -59,6 +65,7 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 - **U7 / D37 / D55:** (U7 remains partially resolved.) Object storage/MinIO was omitted from Phase 1 Compose. Phase 4 decided the upload flow, allowed types and size limit and implemented them behind a storage adapter with a **local-disk** backend (D55, accepted 2026-11-16); the S3-compatible adapter, MinIO in Compose, MinIO's licensing check and avatar upload remain open.
 - **D54–D56 (Phase 4):** proposed on 2026-11-15; **accepted by the owner on 2026-11-16.** D54 is an interim second source of truth for page content that Phase 6 removes.
 - **D58–D60 (Phase 6):** proposed on 2026-11-17; **accepted by the owner on 2026-11-18** (§11.11). Open after D59: whether and when to drop the read-only `page_contents` table (needs a migration and an owner decision).
+- **D61 (Phase 7):** proposed on 2026-11-18; **accepted by the owner on 2026-11-19** (§12.11). It deliberately deviates from WEBSOCKET_PROTOCOL §6: names and colours are stamped by the server, not resolved from REST.
 
 - **U13:** Explicit production recovery after Redis Pub/Sub message loss remains a Phase 9 decision. Redis reconnection alone is not proof of reconvergence.
 
@@ -1102,3 +1109,112 @@ feat: Phase 6 – WebSocket collaboration server and live editing
 | Date | Change |
 |---|---|
 | 2026-11-18 | Phase 6 verified on the owner's machine; the two superseded Phase 1 collab test files deleted; D58–D60 accepted; documents updated. |
+
+---
+
+## 12. Phase 7 – implementation record (2026-11-18)
+
+### 12.1 Scope
+
+Phase 7 = Presence and Collaborative UI (IMPLEMENTATION_PLAN Phase 7; FR-PR-01 … FR-PR-05): Yjs awareness, collaborator carets and selections, avatars, online list, join/leave notices, with identity the client cannot forge. Written and executed by Claude in a preparation environment (Node v22.23.5, PostgreSQL 16, Redis 7; TESTING §8.0f). Stopped after Phase 7. Database and REST API: no changes.
+
+### 12.2 What was implemented
+
+- **`packages/shared/src/presence.ts`** (new): the awareness state shape, strict cursor schema, `sanitizeClientAwareness` (server side), `parseRelayedAwareness` (client side), `deriveCollaborators` (one entry per person), avatar helpers, constants. New env setting `COLLAB_MAX_AWARENESS_PER_SECOND` (default 30).
+- **`apps/collab`**: `presence.ts` (`PresenceGuard`) and the `beforeHandleAwareness` hook replace the Phase 6 "discard awareness" rule. The server stamps `{ id, name, color }` from PostgreSQL (loaded once per connection in `access-control.ts`), keeps only a validated cursor, binds each connection to one awareness client id (`connection-registry.ts`), lets a reconnection by the same user take its id over, rate-limits awareness, and never stores it.
+- **`packages/editor/src/presence-caret.ts`** (new) and `collaboration.ts`: carets with name labels and selection highlights as decorations, outgoing cursor throttled to one change per 80 ms; `createCollaborativeRegistry(doc, { awareness })`. No new dependency (the Yjs cursor plugin comes with TipTap).
+- **`apps/web`**: `CollabSession` owns a long-lived awareness that survives provider rebuilds and republishes after sync; `presence-tracker.ts`, `use-presence.ts`, `presence-bar.tsx` (avatar stack, "N online", keyboard-operable list, polite live announcements), caret CSS in `globals.css`, wired into `page-editor.tsx`.
+- **Docs:** WEBSOCKET_PROTOCOL §18, DECISIONS D61 (proposed), TESTING §8.0f, ARCHITECTURE, IMPLEMENTATION_PLAN, PROJECT_MASTER, this section.
+
+### 12.3 Requirements and acceptance criteria
+
+| Item | Result |
+|---|---|
+| Multiple collaborators in the same document; consistent identity | Passed in jsdom tests (two and three simultaneous editors); colour comes from the stored presence colour, so it is the same in every session. |
+| Cursors move in real time; selection highlighting | Passed in jsdom tests; seen working in real browsers by the owner on 2026-11-19 (§12.11). |
+| Disconnected users disappear | Passed: clean close, cut network, revocation. A silent vanish expires after the y-protocols 30 s constant (tested with an aged record, not 30 s of wall-clock time). |
+| Presence correct during reconnection | Passed: same client id after a provider reconnect, and after "Reconnect now" (provider rebuilt). |
+| Client identity not trusted; bound to the authenticated user | Passed: forged id, name, colour and email never reach other clients; client-id squatting and removing another person's presence are dropped. |
+| Document access enforced; no private data | Only users with page access are connected at all (Phase 6); awareness holds id, display name and colour, never an email. |
+| Presence not persisted | Passed: no `document_updates` rows from presence alone; stored updates contain no names or ids. |
+| Tests pass across multiple browser sessions | Passed with jsdom editors; real browsers checked by the owner on 2026-11-19 (§12.11). |
+
+### 12.4 Findings made while implementing
+
+1. **y-protocols ignores a client's first awareness update** (clock 0), so a person who has not moved a cursor would never show up. Fixed by republishing after sync (WEBSOCKET_PROTOCOL §18.3). This also keeps a reconnection under the same client id visible.
+2. **The awareness timeout is not configurable** (`outdatedTimeout` is a constant of 30 s). A planned environment setting was removed.
+3. **`HocuspocusProvider.destroy()` destroys the awareness it was given**; the session therefore wraps it so it lives as long as the document.
+4. **Reconnection needs an id takeover** on the server, otherwise the old connection closing later would remove the new connection's presence.
+5. **Deviation from WEBSOCKET_PROTOCOL §6:** names and colours are stamped by the server rather than resolved from REST (D61, accepted by the owner on 2026-11-19).
+6. **Phase 6 limitation 17.8 item 6 (idle connections)** changes: awareness is now renewed every 15 s. Not re-tested for long idle runs.
+
+### 12.5 Known limitations and open items
+
+Real-browser rendering was checked by the owner on 2026-11-19 (§12.11), who reported no problems with label position, clipping or avatar layout. Names and colours update on the next connection. A person's other tab is shown as a caret with their own name. Join/leave notices are suppressed for the first 1.5 s after connecting. No avatar images (U7). Multi-instance presence is Phase 9. See also WEBSOCKET_PROTOCOL §18.7.
+
+### 12.6 What the owner must do first
+
+D61 was accepted on 2026-11-19. Merge the files from this phase, run `pnpm install` (no dependency changes), `pnpm build:packages`, and then the checks below.
+
+### 12.7 Owner verification checklist
+
+1. `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test --testTimeout=30000` (expect 55 files, 966 tests on a machine like the preparation environment; counts may differ slightly if your Phase 6 tree differs).
+2. Two different browsers, two accounts in one workspace, the same page: both appear in the avatar stack and as "2 online"; each sees the other's caret with the right name and colour, and a coloured selection while the other selects text; carets move while typing; labels are readable and do not cover the text being typed.
+3. Open a third account as a viewer: it appears, its cursor shows, and it cannot edit.
+4. Open the same page in a second tab as one of the users: the list still shows one entry for that person ("2 tabs" in the list).
+5. Close one browser: the person disappears and "… left" is announced after about 3 s. Stop the network (browser offline mode) for 10 s, then restore: presence returns without a duplicate.
+6. Click into the editor of one account and out of it: its caret disappears for the other.
+7. Check that nothing about presence is saved: reload the page with nobody else there; no carets and no names in the content.
+
+### 12.8 Execution results (preparation environment, 2026-11-18)
+
+Baseline 49 files / 878 tests; after: **55 files / 966 tests passed (146 s)**; `eslint .` clean; `tsc --noEmit` clean in all six packages and apps; `prettier --check` clean for all changed files (the repository-wide check fails only on `infra/docker-compose.yml`, untouched). Details and the list of what was not tested: TESTING §8.0f.
+
+### 12.9 Suggested commit message
+
+```
+feat: Phase 7 – presence and collaborative cursors
+
+- collab: PresenceGuard replaces the discard-all awareness rule; relayed
+  identity is built by the server (id/name/colour from the token and
+  PostgreSQL), one awareness client id per connection, reconnection
+  takeover, validated cursor only, awareness rate limit; nothing stored
+- editor: collaborator caret and selection decorations with name labels,
+  throttled cursor publishing
+- web: session-owned awareness that survives provider rebuilds; avatar
+  stack, online list (one entry per person), join/leave notices with grace
+  period, caret styles
+- shared: presence schemas and helpers, COLLAB_MAX_AWARENESS_PER_SECOND
+- test: presence unit, editor, collab integration and multi-session tests;
+  abuse test updated (awareness is no longer discarded)
+- docs: WEBSOCKET_PROTOCOL §18, DECISIONS D61 (proposed), TESTING §8.0f,
+  ARCHITECTURE, IMPLEMENTATION_PLAN, HANDOVER §12
+```
+
+### 12.10 Change log (Phase 7)
+
+New: `packages/shared/src/presence.ts`, `presence.test.ts`; `packages/editor/src/presence-caret.ts`, `presence-caret.test.ts`; `apps/collab/src/presence.ts`; `apps/collab/test/presence.int.test.ts`; `apps/web/src/lib/presence-tracker.ts`, `presence-tracker.test.ts`, `use-presence.ts`; `apps/web/src/components/editor/presence-bar.tsx`, `presence-bar.test.tsx`; `apps/web/test/presence-browsers.int.test.ts`. Changed: see PHASE7_FILES.txt in the delivered archive.
+
+2026-11-19: Phase 7 verified on the owner's machine (§12.11); D61 accepted; ARCHITECTURE, DECISIONS, IMPLEMENTATION_PLAN, PROJECT_MASTER, TESTING, WEBSOCKET_PROTOCOL and this file updated.
+
+### 12.11 Owner verification (2026-11-19)
+
+**Environment:** the owner's Windows machine (Git Bash), PostgreSQL and Redis from Compose (`docker compose -f infra/docker-compose.yml up -d --wait`). Browser names and versions were not recorded.
+
+| Step | Result |
+|---|---|
+| `pnpm install`, `pnpm build:packages`, `pnpm lint`, `pnpm format:check`, `pnpm typecheck` | Passed (owner-reported) |
+| `pnpm test --testTimeout=30000`, first full run | **55 files, 965 of 966 tests passed (54 files passed, 1 failed), 257.73 s.** The failure: `apps/collab/test/sync.int.test.ts` > persistence (PERSIST) > "keeps a document in memory and retries when PostgreSQL fails to store"; `expect(local.collab.persistence.failingDocuments).toBe(0)` (line 231) received 1 |
+| That file alone, `pnpm test apps/collab/test/sync.int.test.ts --testTimeout=30000` | Passed 13 of 13 on four runs of 9–10 s each. (A first attempt through `pnpm vitest run` skipped all 13 tests because `DATABASE_URL` and `REDIS_URL` were not loaded; the `pnpm test` script reads `.env`.) |
+| API, collab and web started (`pnpm dev:api`, `pnpm dev:collab`, `pnpm dev:web`); login | Worked (owner-reported) |
+| §12.7 item 2: two browsers, two accounts, one page | Reported as expected: both people in the avatar stack and "2 online", carets with name and colour, selection highlight, carets moving while typing, readable labels |
+| §12.7 item 7: nothing about presence saved | Reported as expected: after closing the second browser and reloading, no carets, names or presence in the content |
+| §12.7 items 3–6: Viewer, second tab, close and offline, focus and blur | Reported as expected: the Viewer appeared with a visible cursor and could not edit; one entry per person for two tabs; presence left and returned without a duplicate; the caret disappeared on blur |
+
+The checks were reported as "all good" per group; no per-step detail, screenshots or timings were recorded.
+
+**The failed test is a Phase 6 test, not a Phase 7 one.** It passed in isolation every time, so it is flaky under the load of 55 parallel workers on a laptop. Likely cause (a hypothesis, not proven): the test asserts the counter once, right after the stored row appears, while the persistence code may clear the counter a moment later. A possible fix is to wait for it, `await until(() => local.collab.persistence.failingDocuments === 0, 'failing flag cleared')`. **The owner decided not to change the test.** Treat it as a known flaky test; the same failure may appear in a full run, in CI included.
+
+**Decision:** D61 accepted by the owner on 2026-11-19.
+
+**Still not verified:** Docker `apps` profile; GitHub Actions; a single `pnpm check` run (the commands were run separately); idle longer than two minutes with the 15 s awareness renewal; the 30 s expiry in wall-clock time; more than three concurrent users in real browsers; a profile change while connected; two collab instances (Phase 9); automated browser E2E (Playwright, AC-7.1).

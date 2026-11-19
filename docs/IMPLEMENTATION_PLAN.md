@@ -337,6 +337,8 @@ AC-1.8 is met at spike level. AC-1.9 remains partial pending item-by-item review
 
 ## Phase 7 – Presence and Collaborative UI
 
+**Status (2026-11-19):** implemented 2026-11-18 and executed in a preparation environment (HANDOVER §12); owner-verified locally on 2026-11-19, including a manual check in real browsers (HANDOVER §12.11); D61 accepted. Not done: the automated two-browser Playwright test (AC-7.1), Docker, CI, final owner acceptance.
+
 **Objectives:** Make collaboration visible: avatars, carets, selections, collaborator list and join/leave notifications, with spoof-resistant identity.
 
 **Scope:** FR-PR-01 … FR-PR-05.

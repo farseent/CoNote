@@ -131,3 +131,33 @@
   min-height: 4rem;
   padding-bottom: 1rem;
 }
+
+/* Collaborators' carets and selections (Phase 7). Decorations only: never part of the document. */
+.conote-caret {
+  position: relative;
+  display: inline;
+  margin: 0 -1px;
+  border-left: 2px solid var(--conote-caret-color, #64748b);
+  pointer-events: none;
+  user-select: none;
+  word-break: normal;
+}
+.conote-caret__flag {
+  position: absolute;
+  top: -1.35em;
+  left: -2px;
+  padding: 0 0.3rem;
+  border-radius: 0.25rem 0.25rem 0.25rem 0;
+  background: var(--conote-caret-color, #64748b);
+  color: var(--conote-caret-text, #fff);
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  z-index: 5;
+}
+.conote-selection {
+  pointer-events: none;
+}

@@ -19,6 +19,8 @@ export interface CollabConfig {
   maxConnections: number;
   maxMessagesPerSecond: number;
   shutdownTimeoutMs: number;
+  /** Awareness messages one connection may send per second; the excess is dropped. */
+  maxAwarenessPerSecond: number;
 }
 
 export function createCollabConfig(env: CollabEnv, address = '0.0.0.0'): CollabConfig {
@@ -37,5 +39,6 @@ export function createCollabConfig(env: CollabEnv, address = '0.0.0.0'): CollabC
     maxConnections: env.COLLAB_MAX_CONNECTIONS,
     maxMessagesPerSecond: env.COLLAB_MAX_MESSAGES_PER_SECOND,
     shutdownTimeoutMs: env.COLLAB_SHUTDOWN_TIMEOUT_MS,
+    maxAwarenessPerSecond: env.COLLAB_MAX_AWARENESS_PER_SECOND,
   };
 }

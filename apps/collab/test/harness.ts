@@ -92,6 +92,7 @@ export class Harness {
       maxConnectionsPerUser: 50,
       maxConnections: 5000,
       maxMessagesPerSecond: 10_000,
+      maxAwarenessPerSecond: 10_000,
       shutdownTimeoutMs: 5000,
       ...options.config,
     };
@@ -120,20 +121,20 @@ export class Harness {
 
   // ───────────── seeding ─────────────
 
-  async user(label = 'u'): Promise<TestUser> {
+  async user(label = 'u', presenceColor = '#4F46E5'): Promise<TestUser> {
     const id = randomUUID();
     await this.prisma.user.create({
       data: {
         id,
-        email: `${label}-${id.slice(0, 8)}${EMAIL_DOMAIN}`,
+        email: `${label.toLowerCase()}-${id.slice(0, 8)}${EMAIL_DOMAIN}`,
         passwordHash: 'not-a-real-hash',
         displayName: label,
-        presenceColor: '#4F46E5',
+        presenceColor,
       },
     });
     this.createdUserIds.push(id);
     const session = await this.session(id);
-    return { id, sessionId: session };
+    return { id, sessionId: session, name: label, color: presenceColor };
   }
 
   async session(userId: string, overrides: { expiresAt?: Date; absoluteExpiresAt?: Date } = {}) {
@@ -272,6 +273,9 @@ export class Harness {
 export interface TestUser {
   id: string;
   sessionId: string;
+  /** The display name and presence colour the user was created with. */
+  name: string;
+  color: string;
 }
 
 /** Poll until `check` is true; fails with `what` after `timeoutMs`. */
@@ -345,6 +349,10 @@ export class TestClient {
       token: options.token ?? (() => harness.token(user, pageId)),
       onSynced: () => {
         this.synced = true;
+        // As the web client does: a first awareness update has clock 0, which y-protocols
+        // ignores, so publish again once the server knows this connection.
+        const awareness = this.provider.awareness;
+        awareness?.setLocalState(awareness.getLocalState() ?? {});
         resolveSettled();
       },
       onAuthenticationFailed: ({ reason }: { reason: string }) => {

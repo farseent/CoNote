@@ -1,7 +1,8 @@
 # CoNote – WebSocket Protocol
 
 **Status:** Protocol design only. (Phase 3 note: the REST API now publishes the §10 access events `member.role_changed`, `member.removed`, `workspace.deleted` and `page.access_changed` to Redis after commit; nothing consumes them until Phase 6.) The Phase 1 collab process shell and health endpoints exist, but every document connection is deliberately rejected; no CoNote collaboration protocol feature is implemented. The disposable Phase 1b harness is prepared under `spikes/collab-poc/`, but S1–S11 have not yet been executed; all runtime-dependent statements below remain subject to the verification register.
-**Last updated:** 2026-11-17
+**Last updated:** 2026-11-19
+**Phase 7 note (2026-11-18):** presence (Yjs awareness, carets, selections, online list, join/leave notices) is implemented; §18 records what the server and client do. It replaces the Phase 6 rule that awareness is discarded (§17) and refines §6 (identity is stamped by the server, D61, accepted 2026-11-19). The owner verified presence locally in real browsers on 2026-11-19 (HANDOVER §12.11).
 **Phase 6 note (2026-11-17):** the WebSocket server, authentication, permission enforcement, revalidation, reconnection handling and the web client are implemented and were owner-verified locally on 2026-11-18 (HANDOVER §11.11); §17 records what was built and where it differs from the design above. §§1–16 are otherwise unchanged.
 **Phase 5 note (2026-11-16):** no WebSocket feature exists yet. §5a records what Phase 5 implemented at the Yjs level (sync step 1/2 as library functions, local/remote update handling, seeding rule) so Phase 6 can wrap it in the wire protocol; it was executed in a preparation environment on 2026-11-16 (HANDOVER §10.8) but no wire protocol exists yet.
 
@@ -425,7 +426,7 @@ Server to client: `access.changed { readOnly, role }`, `access.revoked { reason 
 
 ### 17.8 Known limitations and risks (Phase 6)
 
-1. **No awareness/presence** (Phase 7): client awareness state is discarded.
+1. **No awareness/presence** (Phase 7): client awareness state is discarded. *(Replaced in Phase 7, §18.)*
 2. **Single instance only** (D28); no Redis document extension.
 3. **No offline-first loading**; edits made offline survive only while the tab stays open.
 4. **Edits typed between a role change and the client learning of it** are dropped by the server; on a downgrade the client starts over, so they disappear from the viewer's copy (they were never stored).
@@ -438,3 +439,58 @@ Server to client: `access.changed { readOnly, role }`, `access.revoked { reason 
 ### 17.9 Configuration (finalized)
 
 API: `COLLAB_JWT_PRIVATE_KEY` (JWK JSON, Ed25519, with `kid`; unset → `PAGE-10` answers 503), `COLLAB_URL` (`ws://localhost:4100`). Collab: `COLLAB_JWT_PUBLIC_KEYS` (JSON array of public JWKs; required; private material is rejected), `COLLAB_ALLOWED_ORIGINS` (default `APP_URL`), `COLLAB_REVALIDATE_INTERVAL_MS` (60000), `COLLAB_STORE_DEBOUNCE_MS` (2000), `COLLAB_STORE_MAX_DEBOUNCE_MS` (10000), `COLLAB_COMPACT_UPDATE_COUNT` (200), `COLLAB_MAX_PAYLOAD_BYTES` (1048576), `COLLAB_MAX_CONNECTIONS_PER_USER` (50), `COLLAB_MAX_CONNECTIONS` (5000), `COLLAB_MAX_MESSAGES_PER_SECOND` (100), `COLLAB_SHUTDOWN_TIMEOUT_MS` (10000). `COLLAB_AWAIT_INITIAL_SYNC_MS` is not used (no Redis document extension). `pnpm collab:keys` prints a new key pair; `node scripts/generate-collab-keys.mjs --write` (also run by `scripts/setup.sh`) adds one to `.env` only when none is there. Key rotation: add the new public key to `COLLAB_JWT_PUBLIC_KEYS`, switch the API's private key, remove the old public key after 60 s.
+
+## 18. Phase 7: presence as implemented (2026-11-18)
+
+Decision D61 (DECISIONS.md) was **accepted by the owner on 2026-11-19**. This section records what the code does. Where it differs from §6, this section is what runs.
+
+### 18.1 What is relayed
+
+Every awareness state the server relays has exactly this shape (`packages/shared/src/presence.ts`):
+
+```
+{ user: { id, name, color }, cursor?: { anchor, head } }
+```
+
+`user` is built by the server for the connection: `id` from the verified token, `name` and `color` from `users.display_name` and `users.presence_color` read from PostgreSQL when the connection opened (a profile change shows after the next connection). `cursor` is the only client-supplied field kept, as two Yjs relative positions, and only when it passes a strict schema (known keys, non-negative safe integers, type names up to 64 characters). Every other field a client sends is dropped. No email address and no other profile data is ever in awareness.
+
+### 18.2 Server rules (`apps/collab/src/presence.ts`, hook `beforeHandleAwareness`)
+
+1. The hook rewrites the update before Hocuspocus applies and relays it. A client-written `user` is ignored in full, so a forged id, name or colour changes nothing for anyone else.
+2. **One awareness client id per connection:** the first id a connection publishes under is bound to it. States under other ids, and removals of other ids, are dropped, so a client can neither publish as another client nor erase another person's presence.
+3. **Reconnection by the same user takes the id over.** A provider that reconnects keeps its Yjs client id, and the connection it left may linger until the server notices it is dead. A claim by a connection of the *same user* on the same page moves the id to the new connection; Hocuspocus's per-connection bookkeeping is moved with it, so the old connection closing later does not remove the new presence. A claim by another user is refused.
+4. A client state larger than 1024 bytes as JSON is kept as presence without a cursor.
+5. A connection may send 30 awareness messages per second (`COLLAB_MAX_AWARENESS_PER_SECOND`); the excess is dropped and logged (the first, then every 100th), and the connection stays open. The overall message limit (§17) still applies.
+6. Read-only roles (VIEWER, COMMENTER) publish presence like everyone else (U4 outcome: awareness from read-only connections is accepted). It is not a write path: their document updates are still refused.
+7. A revoked connection's awareness is rejected, and closing it removes its states (§18.4).
+8. Awareness is never passed to the document store: nothing about presence is written to PostgreSQL or into the Yjs document.
+
+### 18.3 The clock rule (a finding)
+
+y-protocols ignores an awareness update whose clock it has not seen advance, and a client's first update has clock 0, so a client that never changes its state again is never shown. The web client therefore publishes its state again when it is synced (`CollabSession`, `onSynced`), which also makes a reconnection under the same client id take effect at once. Tests that use the provider directly do the same (`apps/collab/test/harness.ts`).
+
+### 18.4 Cleanup and stale presence
+
+- Closing a connection (clean close, network loss detected by the socket, or revocation) removes that connection's states immediately; this is Hocuspocus behaviour and is covered by tests.
+- A client that vanishes without closing its socket is removed by y-protocols' expiry: `outdatedTimeout` is a **constant of 30 s** in y-protocols 1.0.7 and is checked every 3 s (read from the library source; it is not configurable, and a first version of this phase assumed it was). Clients renew every 15 s. The expiry is tested by ageing the server's record by 31 s, not by waiting 30 s of wall-clock time.
+- On the client, when the connection is not live the other collaborators are not listed and nothing is announced; when it is live again people already present are the starting point (§18.5).
+
+### 18.5 Client behaviour
+
+- **Awareness belongs to the session** (`SessionAwareness` in `collab-session.ts`): it lives as long as the document and survives provider rebuilds ("Reconnect now"); `HocuspocusProvider.destroy()` would otherwise destroy it.
+- **Carets and selections** (`packages/editor/src/presence-caret.ts`) use the Yjs cursor plugin, so positions are relative and follow the text through edits. They are ProseMirror decorations: not part of the document, the schema or the Yjs fragment. Names are written as text and colours only as validated `#RRGGBB` values. States that fail validation are ignored. The editor's own cursor is published at most once per 80 ms and cleared at once on blur.
+- **Online list** is one entry per person: other tabs of a person are counted, not listed again, and the current person is listed from the session, first. The avatar is the initials on the person's colour (there is no avatar upload yet, U7).
+- **Join and leave notices** (`presence-tracker.ts`): per person; a leave is announced after a 3 s grace period and not at all if the person comes back; the first 1.5 s after connecting are a quiet start (the server sends existing states then). The announcements are in a polite `aria-live` region.
+
+### 18.6 Where this differs from §6
+
+§6 has the UI resolve name and colour from the REST member list by `user.id`. The server stamps them instead (D61): it needs no member lookup in the browser, works for a person who joined after the list was loaded, and cannot be spoofed by the sender. The browser still validates what it receives.
+
+### 18.7 Limitations and open items
+
+1. Verified with jsdom editors on the real client code against the real server, and then by the owner in real browsers on 2026-11-19 (HANDOVER §12.11), who reported no problems with caret labels, clipping, the avatar stack or the online list. No screenshots or browser versions were recorded.
+2. A person's name and colour are read when a connection opens; a profile change shows after the next connection.
+3. A person's other tab shows as a caret labelled with their own name.
+4. Idle connections: awareness is renewed every 15 s, which now sends traffic on an otherwise idle connection; a long idle run (§17.8 item 6) was not repeated.
+5. Multi-instance presence (Phase 9) is untested; a state is bound to the instance that holds the connection.
+6. The 30 s expiry was not observed in wall-clock time.

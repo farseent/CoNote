@@ -11,6 +11,7 @@ import { describeApiError } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import type { CollabSession, CollabState } from '@/lib/collab-session';
 import { useCollabSession } from '@/lib/use-collab-session';
+import { usePresence } from '@/lib/use-presence';
 import {
   IMAGE_ACCEPT,
   ImageUploadError,
@@ -19,6 +20,7 @@ import {
 } from '@/lib/image-upload';
 import { EditorToolbar } from './editor-toolbar';
 import { CollabStatus } from './collab-status';
+import { PresenceBar } from './presence-bar';
 import { createSlashMenuRender } from './slash-menu';
 
 const IMAGE_INPUT_ID = 'editor-image-input';
@@ -106,7 +108,7 @@ function LoadedEditor({
   state,
   onReady,
 }: Props & { doc: Y.Doc; session: CollabSession; state: CollabState }) {
-  const { guard } = useAuth();
+  const { guard, user } = useAuth();
   const uploadRef = useRef<(files: File[]) => void>(() => undefined);
   const [uploading, setUploading] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
@@ -115,10 +117,18 @@ function LoadedEditor({
 
   // Built once per document: the registry holds the extensions, the host connects them to the page.
   const [extensions] = useState(() =>
-    createEditorExtensions(createCollaborativeRegistry(doc), {
-      host: { requestImage: openImagePicker },
-      renderSlashMenu: createSlashMenuRender(),
-    }),
+    createEditorExtensions(
+      createCollaborativeRegistry(doc, session.awareness ? { awareness: session.awareness } : {}),
+      {
+        host: { requestImage: openImagePicker },
+        renderSlashMenu: createSlashMenuRender(),
+      },
+    ),
+  );
+  const { collaborators, notices } = usePresence(
+    session.awareness,
+    state.phase === 'live',
+    user ? { id: user.id, name: user.displayName, color: user.presenceColor } : null,
   );
 
   const editor = useEditor({
@@ -222,8 +232,13 @@ function LoadedEditor({
           />
         </>
       )}
-      <div className="mt-2 min-h-6">
+      <div className="mt-2 flex min-h-6 flex-wrap items-center justify-between gap-2">
         <CollabStatus state={state} onRetry={() => session.retry()} />
+        <PresenceBar
+          collaborators={collaborators}
+          notices={notices}
+          live={state.phase === 'live'}
+        />
       </div>
       {!editable && (
         <p className="mb-2 text-sm text-slate-500" role="note">

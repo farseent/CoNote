@@ -197,6 +197,8 @@ export const collabEnvSchema = z
     COLLAB_MAX_MESSAGES_PER_SECOND: positiveInt(100, 100_000),
     /** How long a shutdown waits for stores and closes before it gives up. */
     COLLAB_SHUTDOWN_TIMEOUT_MS: positiveInt(10_000, 600_000),
+    /** Awareness messages one connection may send per second; the excess is dropped. */
+    COLLAB_MAX_AWARENESS_PER_SECOND: positiveInt(30, 10_000),
   })
   .transform((env) => ({
     ...env,

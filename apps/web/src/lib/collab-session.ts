@@ -1,4 +1,5 @@
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
+import { Awareness } from 'y-protocols/awareness';
 import * as Y from 'yjs';
 import { parseServerMessage, type CollabTokenResponse, type ServerMessage } from '@conote/shared';
 import { ApiError } from './api-client';
@@ -46,6 +47,21 @@ const TRANSIENT_REASONS = new Set(['TRY_AGAIN_LATER', 'RATE_LIMITED']);
 type Listener = (state: CollabState) => void;
 
 /**
+ * The awareness of one document, kept across provider rebuilds. `HocuspocusProvider.destroy()`
+ * destroys the awareness it was given, but the editor's cursor plugin holds on to it for as
+ * long as the document lives, so destruction is deferred to `dispose()`, called with the
+ * document. The server stamps identity on what this publishes (D61); only the cursor matters.
+ */
+class SessionAwareness extends Awareness {
+  override destroy(): void {
+    // Kept alive: the provider that used this awareness is being replaced, not the document.
+  }
+  dispose(): void {
+    super.destroy();
+  }
+}
+
+/**
  * One page's live connection. Framework-free so it can be tested without React.
  *
  * It owns the `Y.Doc` and the Hocuspocus provider, fetches a fresh collaboration token for every
@@ -69,6 +85,7 @@ export class CollabSession {
   };
   private listeners = new Set<Listener>();
   private currentDoc: Y.Doc | null = null;
+  private currentAwareness: SessionAwareness | null = null;
   private currentProvider: HocuspocusProvider | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private attempts = 0;
@@ -82,6 +99,10 @@ export class CollabSession {
 
   get doc(): Y.Doc | null {
     return this.currentDoc;
+  }
+  /** The awareness of the current document: the editor's cursor and collaborators' states. */
+  get awareness(): Awareness | null {
+    return this.currentAwareness;
   }
   get provider(): HocuspocusProvider | null {
     return this.currentProvider;
@@ -113,8 +134,7 @@ export class CollabSession {
     this.destroyed = true;
     clearTimeout(this.retryTimer);
     this.teardownProvider();
-    this.currentDoc?.destroy();
-    this.currentDoc = null;
+    this.discardDocument();
     this.listeners.clear();
   }
 
@@ -123,10 +143,7 @@ export class CollabSession {
   private async open(opts: { keepDocument: boolean }): Promise<void> {
     clearTimeout(this.retryTimer);
     this.teardownProvider();
-    if (!opts.keepDocument) {
-      this.currentDoc?.destroy();
-      this.currentDoc = null;
-    }
+    if (!opts.keepDocument) this.discardDocument();
     this.update({
       phase: this.state.everSynced && opts.keepDocument ? 'offline' : 'connecting',
       unsyncedChanges: false,
@@ -144,9 +161,13 @@ export class CollabSession {
 
     if (!opts.keepDocument || this.currentDoc === null) {
       this.currentDoc = new Y.Doc();
+      this.currentAwareness = new SessionAwareness(this.currentDoc);
       this.update({ generation: this.state.generation + 1, everSynced: false });
     }
     const doc = this.currentDoc;
+    const awareness = this.currentAwareness;
+    // A previous provider removed this client's state when it was destroyed; publish again.
+    if (awareness && awareness.getLocalState() === null) awareness.setLocalState({});
     this.update({ readOnly: info.readOnly, role: info.role });
 
     // The token just fetched is used for the first connection; every reconnection fetches anew.
@@ -162,6 +183,7 @@ export class CollabSession {
       websocketProvider,
       name: info.documentName,
       document: doc,
+      ...(awareness ? { awareness } : {}),
       token: async () => {
         if (firstToken !== null) {
           const token = firstToken;
@@ -183,6 +205,11 @@ export class CollabSession {
         if (this.currentProvider !== provider || this.isTerminal()) return;
         this.attempts = 0;
         this.authAttemptsWithoutSync = 0;
+        // Publish presence again now that the server knows this connection. y-protocols
+        // ignores an awareness update whose clock it has not seen advance, and a client's first
+        // update has clock 0, so without this a person who has not moved a cursor yet (or who
+        // just reconnected under the same client id) would not show up until the next renewal.
+        awareness?.setLocalState(awareness.getLocalState() ?? {});
         this.update({ phase: 'live', everSynced: true });
       },
       onUnsyncedChanges: () => {
@@ -292,8 +319,7 @@ export class CollabSession {
   private finish(phase: 'denied' | 'revoked', reason: string): void {
     clearTimeout(this.retryTimer);
     this.teardownProvider();
-    this.currentDoc?.destroy();
-    this.currentDoc = null;
+    this.discardDocument();
     this.update({
       phase,
       reason,
@@ -301,6 +327,13 @@ export class CollabSession {
       unsyncedChanges: false,
       generation: this.state.generation + 1,
     });
+  }
+
+  private discardDocument(): void {
+    this.currentAwareness?.dispose();
+    this.currentAwareness = null;
+    this.currentDoc?.destroy();
+    this.currentDoc = null;
   }
 
   private teardownProvider(): void {

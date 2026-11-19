@@ -200,7 +200,7 @@ describe('application messages and limits (LIMITS)', () => {
     await Promise.all(clients.map((c) => c.destroy()));
   });
 
-  it('accepts no client-supplied presence state (until Phase 7 binds identity)', async () => {
+  it('relays only the server-built identity of a connection, never client-supplied presence', async () => {
     const h = await start();
     const { owner, other, pageId } = await pair(h);
     const a = await h.connect(owner, pageId);
@@ -210,7 +210,9 @@ describe('application messages and limits (LIMITS)', () => {
     const states = [...b.provider.awareness!.getStates().entries()].filter(
       ([id]) => id !== b.doc.clientID,
     );
-    expect(states).toEqual([]);
+    expect(states).toHaveLength(1);
+    expect(JSON.stringify(states)).not.toContain('Impersonated');
+    expect(JSON.stringify(states)).not.toContain('xxxxx');
     await Promise.all([a, b].map((x) => x.destroy()));
   });
 });

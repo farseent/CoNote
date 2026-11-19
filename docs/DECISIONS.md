@@ -1,7 +1,7 @@
 # CoNote – Technical Decisions
 
-**Status:** Phase 1 infrastructure implemented and Phase 1b spike executed; Phase 2 authentication and user management implemented and locally verified. D41–D47 explicitly accepted by the project owner on 2026-11-13. Phase 2 GitHub Actions CI was deferred by the owner and later reported as passed by the owner (recorded 2026-11-15). Evidence and remaining limitations are tracked in HANDOVER.md. D54–D57 were accepted by the owner on 2026-11-16 and D58–D60 on 2026-11-18.
-**Last updated:** 2026-11-18
+**Status:** Phase 1 infrastructure implemented and Phase 1b spike executed; Phase 2 authentication and user management implemented and locally verified. D41–D47 explicitly accepted by the project owner on 2026-11-13. Phase 2 GitHub Actions CI was deferred by the owner and later reported as passed by the owner (recorded 2026-11-15). Evidence and remaining limitations are tracked in HANDOVER.md. D54–D57 were accepted by the owner on 2026-11-16 and D58–D60 on 2026-11-18. D61 (Phase 7) is proposed and awaits owner review.
+**Last updated:** 2026-11-19
 **Owner:** Project owner (approvals) / Claude (drafting)
 
 This is the permanent decision register for CoNote. Decision IDs (`D#`) and unresolved-question IDs (`U#`) are **permanent**: they are never renumbered or reused. A changed decision is recorded by adding a new decision that supersedes the old one and updating the old one's status.
@@ -80,6 +80,7 @@ This is the permanent decision register for CoNote. Decision IDs (`D#`) and unre
 | D58 | `apps/collab` may import `@conote/editor` (to seed Yjs documents with the editor's own schema) | Accepted (owner approval, 2026-11-18) |
 | D59 | Remove the interim page-content endpoints (CONTENT-01/02) and the HTTP autosave; keep `page_contents` as a read-only seed source | Accepted (owner approval, 2026-11-18) |
 | D60 | Phase 6 collaboration server: token carries identity only, one socket per document, application messages, access changes and client resync rules, presence disabled until Phase 7 | Accepted (owner approval, 2026-11-18) |
+| D61 | Phase 7 presence: server-stamped identity, one awareness client id per connection, validated cursor only, no persistence | Accepted (owner approval, 2026-11-19) |
 
 ---
 
@@ -512,6 +513,20 @@ Protected pages call `requireUser()` (server component, asks the API with the fo
   8. **Single instance:** the Hocuspocus Redis extension is not used (D28, multi-instance is Phase 9). Redis is used for access events only.
 - **Consequences:** items that remain open are listed in HANDOVER §11.5.
 
+### D61 – Phase 7 presence and awareness identity
+
+- **Status:** Accepted (owner approval, 2026-11-19; proposed 2026-11-18, Phase 7). Verified by the owner in real browsers on 2026-11-19 (HANDOVER §12.11). Details in WEBSOCKET_PROTOCOL §18.
+- **Decisions:**
+  1. **The server builds the relayed identity.** `user = { id, name, color }` comes from the verified connection and PostgreSQL; the client's `user` field is ignored. This refines the §6 design (REST lookup in the browser); the reasons are in WEBSOCKET_PROTOCOL §18.6. The consequence is that a profile change shows after reconnecting.
+  2. **One awareness client id per connection**, first use wins; states and removals for other ids are dropped; a reconnection by the same user takes its old id over.
+  3. **Only a validated cursor** is taken from the client; everything else is dropped; states over 1024 bytes lose their cursor; 30 awareness messages per second per connection, the excess dropped.
+  4. **Read-only roles publish presence** (U4 outcome applied).
+  5. **Presence is never stored.** The 30 s expiry is the y-protocols constant (not configurable).
+  6. **No new dependency:** carets use the Yjs cursor plugin already installed through TipTap; avatars are initials on the person's colour.
+- **Consequences:** `COLLAB_MAX_AWARENESS_PER_SECOND` is a new collab setting; the client must publish its state again after sync (§18.3).
+
+---
+
 ## Unresolved decisions
 
 The "Needed by" column states the phase gate for each item. Resolved items remain listed with their evidence so permanent IDs are preserved.
@@ -521,7 +536,7 @@ The "Needed by" column states the phase gate for each item. Resolved items remai
 | **U1 – RESOLVED (Phase 1b, 2026-11-12)** | Node.js baseline: 24 or 26? | Node.js 24 or Node.js 26 | Node.js 24 LTS approved by the project owner on 2026-11-12; used for the Phase 1b spike and root checks. See D16 and HANDOVER. | Phase 1 |
 | **U2 – RESOLVED (Phase 1b, 2026-11-12)** | TypeScript version: 5.9.3 or newer (6.x/7.x)? | TypeScript 5.9.3 or newer | TypeScript 5.9.3 approved by the project owner on 2026-11-12; used for the Phase 1b spike and root checks. See D17 and HANDOVER. | Phase 1 |
 | **U3 – PARTIALLY EVIDENCED (Phase 1b, 2026-11-12)** | Do Hocuspocus store hooks and Redis behave as the persistence design (D15) assumes? Consider debounce options, store-on-unload, Redis-originated updates, duplicate writes and lock behaviour. | Diff-on-store; per-update append from change hook with origin filtering | S4 and S5 verified persistence, Redis-originated updates and duplicate-write behaviour. Store-on-unload and direct concurrent row-lock behaviour remain unverified. | Phase 1 closure / Phase 9 |
-| **U4 – PARTIALLY EVIDENCED (Phase 1b, 2026-11-12)** | Do awareness updates propagate across instances and from read-only connections, and what happens to stale awareness after an instance crash? | Empirical verification | S2, S3 and S10 verified cross-instance awareness, read-only awareness propagation and forged identity rejection. Stale awareness after server crash and name/color tampering remain unverified. | Phase 1 closure |
+| **U4 – PARTIALLY EVIDENCED (Phase 1b, 2026-11-12)** | Do awareness updates propagate across instances and from read-only connections, and what happens to stale awareness after an instance crash? | Empirical verification | S2, S3 and S10 verified cross-instance awareness, read-only awareness propagation and forged identity rejection. Stale awareness after server crash and name/color tampering remain unverified. *Phase 7 (D61, accepted 2026-11-19) applied the read-only outcome (viewers publish presence); forged name and colour were tested against the real collab server in the preparation environment, and the owner saw a Viewer's cursor in real browsers on 2026-11-19; stale awareness after a server crash is still untested.* | Phase 1 closure |
 | **U6** | Invitation email delivery provider | SMTP via Mailpit in dev + provider TBD in prod; transactional email API | Phase 3 ships **link-based** invitations plus an email-adapter interface (console/Mailpit for dev); pick a production provider before Phase 11 | Phase 3 (link only) / Phase 11 (provider) |
 | **U7 – PARTIALLY RESOLVED (Phase 4, 2026-11-15; D55 accepted 2026-11-16)** | Image upload flow and limits | Presigned direct upload to object storage; upload through the API | Flow (authorize, upload, confirm with size and magic-byte checks, read with access control), allowed types (PNG, JPEG, GIF, WebP; no SVG) and limit (5 MiB) are decided and implemented behind a storage adapter with a local-disk backend. **Still open after D55 approval:** the S3-compatible adapter, MinIO (or alternative) in Compose, MinIO's current distribution/licensing, avatar upload; the production backend must be chosen before deployment | Phase 4 (flow, limits) / owner decision for the production backend |
 | **U8** | Behaviour of comment anchors after version restore (D8 + D9) | Mark affected threads "detached" (kept, unanchored); attempt re-anchoring by quoted text | Mark detached, keep thread and quoted text; re-anchoring is a later enhancement | Phase 8 |
