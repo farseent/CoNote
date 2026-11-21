@@ -203,19 +203,32 @@ describe('presence across instances (AC-9.2)', () => {
 
 describe('no message loops and no duplicate processing (AC-9.9)', () => {
   it('one edit produces a bounded number of Redis messages that stops once the instances agree', async () => {
-    const { users, pageId } = await editors(3);
-    const clients = [
-      await a.connect(users[0]!, pageId),
-      await b.connect(users[1]!, pageId),
-      await c.connect(users[2]!, pageId),
-    ];
-    await sleep(300);
+    // Own cluster: its channel prefix is unique, so the counter sees only this test's traffic
+    // and not the presence renewals of documents that earlier tests left open.
+    const group = new Cluster();
+    const first = await group.add();
+    const second = await group.add();
+    const third = await group.add();
     const counter = new Redis(requireInfraEnv().REDIS_URL);
-    let messages = 0;
-    // Document channels (`<prefix>:<name>`) and the per-instance reply channels (`<prefix>#reply:<id>`).
-    await counter.psubscribe(`${cluster.prefix}:*`, `${cluster.prefix}#reply:*`);
-    counter.on('pmessageBuffer', () => (messages += 1));
     try {
+      const { owner, workspaceId, pageId } = await first.scene();
+      const users = [owner];
+      for (const name of ['ed1', 'ed2']) {
+        const user = await first.user(name);
+        await first.member(workspaceId, user, 'EDITOR');
+        users.push(user);
+      }
+      const clients = [
+        await first.connect(users[0]!, pageId),
+        await second.connect(users[1]!, pageId),
+        await third.connect(users[2]!, pageId),
+      ];
+      await sleep(300);
+      let messages = 0;
+      // Document channels (`<prefix>:<name>`) and the per-instance reply channels (`<prefix>#reply:<id>`).
+      await counter.psubscribe(`${group.prefix}:*`, `${group.prefix}#reply:*`);
+      counter.on('pmessageBuffer', () => (messages += 1));
+
       clients[0]!.insert('x');
       await eventually(() => clients.every((client) => client.text === 'x'), 'all instances agree');
       await sleep(500);
@@ -228,6 +241,7 @@ describe('no message loops and no duplicate processing (AC-9.9)', () => {
       expect(afterSettling).toBeLessThan(40);
     } finally {
       await counter.quit();
+      await group.close();
     }
   });
 
@@ -254,31 +268,45 @@ describe('no message loops and no duplicate processing (AC-9.9)', () => {
     }
   });
 
-  it('replicated changes are stored by one write: the other instances find them already stored', async () => {
-    const { users, pageId } = await editors(2);
-    const x = await a.connect(users[0]!, pageId);
-    const y = await b.connect(users[1]!, pageId);
-    const before = b.collab.persistence.stats;
-    x.insert('stored once');
-    await eventually(() => y.text === 'stored once', 'b has the change');
-    await eventually(
-      async () => (await storedText(pageId)) === 'stored once',
-      'the text is in PostgreSQL',
-    );
-    await eventually(
-      () => b.collab.persistence.stats.stores > before.stores,
-      'instance b ran its replicated store',
-    );
-    await sleep(400);
-    const rows = await a.prisma.documentUpdate.count({ where: { pageId } });
-    expect(rows).toBe(1);
-    const after = b.collab.persistence.stats;
-    // The origin wrote the row; the replicating instance wrote nothing (it either skipped the
-    // transaction or found nothing to add after taking the lock; the two race with the origin).
-    expect(after.rowsWritten).toBe(before.rowsWritten);
-    expect(after.noopStores + after.skippedWithoutLock).toBeGreaterThan(
-      before.noopStores + before.skippedWithoutLock,
-    );
+  it('replicated changes are stored by one write: the other instance finds them already stored', async () => {
+    // Own cluster: the shared instances' counters also include stores of other tests' documents.
+    const group = new Cluster();
+    const first = await group.add();
+    const second = await group.add();
+    try {
+      const { owner, workspaceId, pageId } = await first.scene();
+      const peer = await first.user('peer');
+      await first.member(workspaceId, peer, 'EDITOR');
+      const x = await first.connect(owner, pageId);
+      const y = await second.connect(peer, pageId);
+      const before = [first, second].map((i) => i.collab.persistence.stats);
+
+      x.insert('stored once');
+      await eventually(() => y.text === 'stored once', 'second instance has the change');
+      await eventually(
+        async () => (await storedText(pageId)) === 'stored once',
+        'the text is in PostgreSQL',
+      );
+      // Both instances run a store: the origin's own and the replicated one.
+      await eventually(
+        () =>
+          [first, second].every((i, n) => i.collab.persistence.stats.stores > before[n]!.stores),
+        'both instances ran their store',
+      );
+      await sleep(400);
+
+      const after = [first, second].map((i) => i.collab.persistence.stats);
+      const delta = (key: 'rowsWritten' | 'noopStores' | 'skippedWithoutLock') =>
+        after.reduce((sum, s, n) => sum + s[key] - before[n]![key], 0);
+
+      // Exactly one row, written by exactly one instance. Which one wins the page lock is a race.
+      expect(await first.prisma.documentUpdate.count({ where: { pageId } })).toBe(1);
+      expect(delta('rowsWritten')).toBe(1);
+      // The other instance found the change already stored: it skipped or took the lock for nothing.
+      expect(delta('noopStores') + delta('skippedWithoutLock')).toBeGreaterThanOrEqual(1);
+    } finally {
+      await group.close();
+    }
   });
 });
 
