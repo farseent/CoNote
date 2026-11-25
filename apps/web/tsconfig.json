@@ -18,6 +18,7 @@
     "next-env.d.ts",
     "src",
     "next.config.ts",
+    "security-headers.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],

@@ -557,6 +557,37 @@ describe('version history', () => {
     await waitFor(() => expect(screen.queryByTestId('version-preview')).toBeNull());
   });
 
+  it('moves focus into the confirmation, and Escape closes it and returns focus (AC-10.7)', async () => {
+    const version = aVersion();
+    installApi({
+      versions: [version],
+      versionStates: new Map([[version.id, await versionState('Old')]]),
+    });
+    setSession();
+    mount();
+    await ready();
+    await openPanel('Version history');
+    await user().click(await screen.findByRole('button', { name: /First draft/ }));
+    const preview = await screen.findByTestId('version-preview');
+    await user().click(within(preview).getByRole('button', { name: 'Restore this version' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Confirm restore' });
+    // The button that opened the dialog is gone; focus must not fall back to the page body.
+    // The safe choice (Cancel) is focused, not the destructive one.
+    await waitFor(() =>
+      expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Cancel' })),
+    );
+    await user().keyboard('{Escape}');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(restoreVersion).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(screen.getByTestId('version-preview')).getByRole('button', {
+          name: 'Restore this version',
+        }),
+      ),
+    );
+  });
+
   it('cancelling the confirmation restores nothing', async () => {
     const version = aVersion();
     installApi({

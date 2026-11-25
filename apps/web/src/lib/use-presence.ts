@@ -15,6 +15,29 @@ const MAX_NOTICES = 3;
 const NOTICE_MS = 5000;
 
 /**
+ * Whether two lists show the same thing. A collaborator's cursor moving changes awareness many
+ * times a second but nothing in the list (only `hasCursor` is shown), and `usePresence` runs
+ * inside the editor component, so an unchanged list must not cause a render.
+ */
+export function sameCollaborators(
+  a: readonly PresenceCollaborator[],
+  b: readonly PresenceCollaborator[],
+): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((x, i) => {
+    const y = b[i]!;
+    return (
+      x.userId === y.userId &&
+      x.name === y.name &&
+      x.color === y.color &&
+      x.connections === y.connections &&
+      x.hasCursor === y.hasCursor &&
+      x.isSelf === y.isSelf
+    );
+  });
+}
+
+/**
  * Who is online on the page, from the session's awareness (WEBSOCKET_PROTOCOL §18). One entry
  * per person, the current person first. While the connection is not live the others are not
  * known, so only the current person is listed and nothing is announced; when it is live again
@@ -67,7 +90,7 @@ export function usePresence(
     if (!awareness || !live) return;
     const refresh = () => {
       const list = deriveCollaborators(awareness.getStates(), awareness.clientID, selfValue);
-      setCollaborators(list);
+      setCollaborators((current) => (sameCollaborators(current, list) ? current : list));
       tracker?.update(list);
     };
     refresh();

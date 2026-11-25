@@ -61,7 +61,7 @@ Error:
 | 401 | `INVALID_CREDENTIALS` | Wrong email or password (uniform message) |
 | 403 | `FORBIDDEN` | Insufficient role |
 | 403 | `INVALID_ORIGIN` | Origin not allowed on a state-changing request |
-| 404 | `NOT_FOUND` | Resource missing or hidden |
+| 404 | `NOT_FOUND` | Resource missing or hidden; also a path parameter longer than 100 characters, which the router rejects before any handler runs and which cannot name a resource (D68) |
 | 409 | `CONFLICT` | Generic state conflict |
 | 409 | `EMAIL_TAKEN` | Email already registered |
 | 409 | `ALREADY_MEMBER` | Invitee is already a workspace member |

@@ -112,6 +112,8 @@ export class CollabSession {
   private attempts = 0;
   private authAttemptsWithoutSync = 0;
   private destroyed = false;
+  /** Identifies the newest connection attempt; a slower, older one must not replace it. */
+  private attemptSeq = 0;
   private readonly retryDelays: readonly number[];
 
   constructor(private readonly options: CollabSessionOptions) {
@@ -153,6 +155,7 @@ export class CollabSession {
 
   destroy(): void {
     this.destroyed = true;
+    this.attemptSeq += 1;
     this.failPending('The connection was closed.');
     clearTimeout(this.retryTimer);
     this.teardownProvider();
@@ -163,6 +166,7 @@ export class CollabSession {
   // ───────────── connecting ─────────────
 
   private async open(opts: { keepDocument: boolean }): Promise<void> {
+    const attempt = ++this.attemptSeq;
     clearTimeout(this.retryTimer);
     this.teardownProvider();
     if (!opts.keepDocument) this.discardDocument();
@@ -175,11 +179,11 @@ export class CollabSession {
     try {
       info = await this.options.fetchToken();
     } catch (error) {
-      if (this.destroyed) return;
+      if (this.destroyed || attempt !== this.attemptSeq) return;
       this.handleTokenFailure(error, opts.keepDocument);
       return;
     }
-    if (this.destroyed) return;
+    if (this.destroyed || attempt !== this.attemptSeq) return;
 
     if (!opts.keepDocument || this.currentDoc === null) {
       this.currentDoc = new Y.Doc();
@@ -425,6 +429,7 @@ export class CollabSession {
 
   /** End for good: stop reconnecting and drop the local document. */
   private finish(phase: 'denied' | 'revoked', reason: string): void {
+    this.attemptSeq += 1;
     clearTimeout(this.retryTimer);
     this.teardownProvider();
     this.discardDocument();

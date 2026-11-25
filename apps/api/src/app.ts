@@ -4,7 +4,7 @@ import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod
 import { REQUEST_ID_HEADER, isAcceptableRequestId } from '@conote/shared';
 import type { ApiConfig } from './config.js';
 import type { Dependencies } from './dependencies.js';
-import { registerErrorHandling } from './errors.js';
+import { frameworkErrorHandler, registerErrorHandling } from './errors.js';
 import { registerSecurity } from './plugins/security.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -24,6 +24,7 @@ export function buildApp({ logger, dependencies, config }: BuildAppOptions): Fas
     loggerInstance: logger,
     trustProxy: config.trustProxy.length > 0 ? config.trustProxy : false,
     bodyLimit: BODY_LIMIT_BYTES,
+    frameworkErrors: frameworkErrorHandler,
     genReqId: (req) => {
       const inbound = req.headers[REQUEST_ID_HEADER];
       return isAcceptableRequestId(inbound) ? inbound : randomUUID();

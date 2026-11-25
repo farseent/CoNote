@@ -9,3 +9,5 @@ README.md
 CLAUDE.md
 apps/web/next-env.d.ts
 spikes/**
+e2e/test-results
+e2e/playwright-report

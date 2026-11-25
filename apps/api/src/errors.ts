@@ -138,3 +138,23 @@ export function registerErrorHandling(app: FastifyInstance): void {
     );
   });
 }
+
+/**
+ * Errors the router raises before any route or hook runs (a path parameter over the length
+ * limit, a malformed URL). Fastify would answer these in its own JSON shape, with its internal
+ * error code and the request URL echoed back; this keeps the standard envelope (D31) and leaks
+ * nothing. A parameter that long cannot name anything, so it is answered like any unknown
+ * resource.
+ */
+export function frameworkErrorHandler(
+  error: { code?: string },
+  request: FastifyRequest,
+  reply: FastifyReply,
+): void {
+  const tooLong = error.code === 'FST_ERR_MAX_PARAM_LENGTH';
+  const code: ErrorCode = tooLong ? 'NOT_FOUND' : 'VALIDATION_ERROR';
+  request.log.info({ frameworkError: error.code }, 'request rejected by the router');
+  void reply
+    .code(tooLong ? 404 : 400)
+    .send(errorEnvelope({ code, message: CLIENT_MESSAGES[code], requestId: request.id }));
+}

@@ -86,3 +86,92 @@ jobs:
         run: pnpm run build
         env:
           NODE_ENV: production
+
+  # End-to-end and keyboard-operability tests in a real browser (docs/TESTING.md §5.11, AC-10.2,
+  # AC-10.7). The stack runs the way production does (NODE_ENV=production: the session cookie name
+  # differs from development). First run in GitHub Actions: not yet verified there (HANDOVER §15).
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: conote
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: conote
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U conote -d conote"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://conote:ci_password@localhost:5432/conote
+      REDIS_URL: redis://localhost:6379
+      LOG_LEVEL: warn
+      APP_URL: http://localhost:3000
+      API_INTERNAL_URL: http://localhost:4000
+      COLLAB_URL: ws://localhost:4100
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+        env:
+          NODE_ENV: production
+
+      - name: Apply database migrations
+        run: pnpm run db:migrate:deploy
+
+      - name: Install the browser
+        run: pnpm --filter @conote/e2e exec playwright install --with-deps chromium
+
+      - name: Start the stack
+        env:
+          NODE_ENV: production
+        run: |
+          node scripts/generate-collab-keys.mjs > "$RUNNER_TEMP/collab-keys.env"
+          set -a; . "$RUNNER_TEMP/collab-keys.env"; set +a
+          nohup node apps/api/dist/main.js > "$RUNNER_TEMP/api.log" 2>&1 &
+          nohup node apps/collab/dist/main.js > "$RUNNER_TEMP/collab.log" 2>&1 &
+          (cd apps/web && nohup pnpm exec next start --port 3000 > "$RUNNER_TEMP/web.log" 2>&1 &)
+          for url in http://localhost:4000/ready http://localhost:4100/ready http://localhost:3000/health; do
+            for i in $(seq 1 60); do
+              curl -fsS "$url" > /dev/null && break
+              sleep 2
+            done
+            curl -fsS "$url" > /dev/null
+          done
+
+      - name: End-to-end and keyboard tests
+        run: pnpm --filter @conote/e2e test
+
+      - name: Keep traces and logs of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure
+          path: |
+            e2e/test-results
+            ${{ runner.temp }}/*.log
+          retention-days: 7

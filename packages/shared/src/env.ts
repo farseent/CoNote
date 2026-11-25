@@ -150,6 +150,8 @@ export const apiEnvSchema = z
     ),
     /** Browser-facing WebSocket URL of the collaboration server, returned by `PAGE-10`. */
     COLLAB_URL: wsUrl.default('ws://localhost:4100'),
+    /** Activity-log rows older than this are deleted (U11, D69). Default 365 days. */
+    ACTIVITY_LOG_RETENTION_DAYS: z.coerce.number().int().min(7).max(3650).default(365),
   })
   .transform((env) => ({
     ...env,

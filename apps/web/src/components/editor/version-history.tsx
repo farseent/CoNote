@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { createDefaultRegistry, createEditorExtensions } from '@conote/editor';
@@ -150,6 +150,17 @@ export function VersionPreview({
   const error = actionError ?? current?.error ?? null;
   const [confirming, setConfirming] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const restoreButton = useRef<HTMLButtonElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const wasConfirming = useRef(false);
+
+  // The confirmation replaces the button that opened it, so focus would fall to the page body.
+  // Move it to the safe choice while the dialog is open and give it back when it closes.
+  useEffect(() => {
+    if (confirming) cancelButton.current?.focus();
+    else if (wasConfirming.current) restoreButton.current?.focus();
+    wasConfirming.current = confirming;
+  }, [confirming]);
 
   useEffect(() => {
     let cancelled = false;
@@ -205,7 +216,12 @@ export function VersionPreview({
         </p>
         <div className="flex gap-2">
           {canRestore && !confirming && (
-            <button type="button" className={buttonClass} onClick={() => setConfirming(true)}>
+            <button
+              ref={restoreButton}
+              type="button"
+              className={buttonClass}
+              onClick={() => setConfirming(true)}
+            >
               Restore this version
             </button>
           )}
@@ -219,6 +235,12 @@ export function VersionPreview({
           role="alertdialog"
           aria-label="Confirm restore"
           className="mb-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && !restoring) {
+              event.stopPropagation();
+              setConfirming(false);
+            }
+          }}
         >
           <p>
             Restore this version for everyone? The page as it is now is saved first, so you can come
@@ -234,6 +256,7 @@ export function VersionPreview({
               Restore
             </button>
             <button
+              ref={cancelButton}
               type="button"
               className={buttonClass}
               disabled={restoring}

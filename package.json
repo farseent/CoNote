@@ -27,6 +27,7 @@
     "typecheck": "pnpm run build:packages && pnpm -r --parallel run typecheck && tsc -p tsconfig.json --noEmit",
     "test": "pnpm run build:packages && node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run",
     "test:unit": "pnpm run build:packages && node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run --project unit",
+    "test:e2e": "pnpm --filter @conote/e2e test",
     "test:integration": "pnpm run build:packages && node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run --project integration",
     "db:generate": "pnpm --filter @conote/db run generate",
     "db:migrate:deploy": "pnpm --filter @conote/db run migrate:deploy",

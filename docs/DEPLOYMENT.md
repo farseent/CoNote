@@ -95,6 +95,7 @@ Environment variable names for shared, API, collab and web are **implemented as 
 | `ALLOWED_ORIGINS` | Origin allow-list for CSRF/CORS (D25) | `APP_URL` |
 | `TRUST_PROXY` | Comma-separated proxy IPs / CIDRs / `loopback` / `linklocal` / `uniquelocal` whose `X-Forwarded-For` is trusted (D43). **Production requires a reverse proxy in front of the web app that sets `X-Forwarded-For`; the web app must be reachable only through it** (ARCHITECTURE §10.3) | empty (trust none) |
 | `SESSION_IDLE_TTL_DAYS` / `SESSION_ABSOLUTE_TTL_DAYS` | Session lifetimes in days, 1–365 (D5, D42) | `7` / `30` |
+| `ACTIVITY_LOG_RETENTION_DAYS` | Activity-log rows older than this many days are deleted by an API job (every 6 hours), 7–3650 (D69, Proposed) | `365` |
 | `ASSET_STORAGE_DIR` | Directory of the local-disk image storage adapter (D55). Must be a persistent volume in production and is suitable for a single API instance only; several instances need an S3-compatible adapter, which is not implemented. The Docker `apps` profile does not mount a volume for it yet, so images written there are lost when the container is recreated | `.data/assets` |
 | *(not a variable)* session cookie name | `__Host-conote_session` when `NODE_ENV=production`, else `conote_session` (D42) | — |
 | *(not variables)* Argon2id parameters | Fixed in code: m = 19456 KiB, t = 2, p = 1 (ARCHITECTURE §10.1). `ARGON2_*` variables were not implemented; add them only if tuning per environment becomes necessary | — |

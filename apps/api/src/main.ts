@@ -2,6 +2,7 @@ import { apiEnvSchema, parseEnv } from '@conote/shared';
 import { buildApp } from './app.js';
 import { createApiConfig } from './config.js';
 import { createDependencies } from './dependencies.js';
+import { startActivityPrune } from './jobs/activity-prune.js';
 import { startAssetCleanup } from './jobs/asset-cleanup.js';
 import { startPagePurge } from './jobs/page-purge.js';
 import { startSessionCleanup } from './jobs/session-cleanup.js';
@@ -26,6 +27,13 @@ async function main(): Promise<void> {
     logger,
   });
 
+  const stopActivityPrune = startActivityPrune({
+    prisma: dependencies.prisma,
+    clock: dependencies.clock,
+    logger,
+    retentionDays: env.ACTIVITY_LOG_RETENTION_DAYS,
+  });
+
   const stopAssetCleanup = startAssetCleanup({
     prisma: dependencies.prisma,
     storage: dependencies.storage,
@@ -41,6 +49,7 @@ async function main(): Promise<void> {
     try {
       stopSessionCleanup();
       stopPagePurge();
+      stopActivityPrune();
       stopAssetCleanup();
       await app.close();
       process.exit(0);

@@ -136,6 +136,9 @@ Scenarios (profiles are defined in a run plan before each run; stop criteria are
 
 ### 5.11 End-to-end tests (`E2E`)
 
+> **Phase 10:** implemented in `e2e/` for Chromium (13 tests, §8.0j). Firefox and WebKit are not run.
+
+
 Journeys: register → login → create workspace; invite and accept; build a page tree; edit; image upload; collaborate (two browsers); comment; snapshot and restore; permission restriction; logout/session revoke. A small smoke subset runs on every PR.
 
 ### 5.12 Security tests (`SEC`)
@@ -334,6 +337,208 @@ Full record: HANDOVER §14.9. On the owner's Windows machine (Git Bash; PostgreS
 - **Manual checks in real browsers** (HANDOVER §14.7 items 2–4), reported as working: two collaboration instances on ports 4100 and 4101 (`cluster: "connected"` in both logs), the API's `COLLAB_URL` switched between them so that each browser used a different instance, live text and carets in both directions; Redis stopped for about ten seconds while both browsers typed, with all text present in both after Redis returned and no reload; one instance stopped while typing. Not recorded: the log lines `redis unavailable` and `redis is back`, the time to convergence, and whether the browser reconnected on its own after the instance stopped.
 
 **Update to the "Not tested" list above:** real browsers (two instances, Redis outage, stop of one instance) and the owner's platform are now covered by the manual run. **Still not tested:** Docker `apps` profile and GitHub Actions; more than two instances in browsers; a real network or balancer; TLS to Redis; Redis Cluster/Sentinel; Redis memory limits and eviction; long soak runs; load; any multi-core run; an automated browser E2E.
+
+### 8.0h Phase 10 tests and checks (written and run by Claude, preparation environment, 2026-11-22/23)
+
+Environment: Node 24.18.0, pnpm 12.18.0, PostgreSQL 16 (port 5433), Redis 7.0.15, one virtual CPU, a sandbox without access to `binaries.prisma.sh`. `prisma migrate` could not run: the six migration SQL files were applied with `psql` and `_prisma_migrations` was filled by hand, so `migrate deploy`, `migrate status` and the drift check were **not** run. Playwright's own browser download is blocked there, so the browser tests ran on a Chromium 153 binary taken from the npm package `@sparticuz/chromium` (not a repository dependency), launched with minimal flags.
+
+| Evidence | Result |
+|---|---|
+| Full suite, `vitest run --testTimeout=30000` | 68 files, 1,143 tests passed (baseline 64 files, 1,117; 26 tests added), 260.83 s. The run happened before one added assertion (`no-store`) inside an existing test of `route-inventory.int.test.ts`; that file was re-run alone afterwards: 10 of 10 |
+| Browser tests, `e2e/` (Playwright 1.65.0, Chromium) | 13 tests passed (§8.0j) |
+| `eslint .` | clean, whole repository |
+| `pnpm typecheck` | passed in all 7 workspaces (including `e2e`) |
+| `prettier --check` | all files changed or added in this phase are clean. **22 files that this phase did not touch are flagged** (listed by `pnpm format:check`; for example `apps/web/src/lib/page-tree.ts`, wrapped as if the line width were about 80 while `.prettierrc` says 100). Not reformatted; owner action in HANDOVER §15.4 |
+| API route coverage | 53 of 53 contract endpoints and `/health`, `/ready` returned a 2xx in a passing test (§8.0i) |
+
+New tests and what they establish:
+
+| Test file | Tests | What it establishes |
+|---|---|---|
+| `apps/web/src/lib/collab-session.test.ts` (`overlapping connection attempts`) | 2 | A double "Reconnect now" leaves one live provider; an older, slower token fetch never replaces a newer attempt. Both failed before the fix. |
+| `apps/web/src/lib/use-presence.test.tsx` | 2 | 50 cursor moves by one collaborator cause 0 re-renders of the host (50 before the fix; React calls a component once more for the first update that changes nothing, then bails out, so one move is absorbed first); visible changes still update. |
+| `apps/web/src/components/editor/comments-versions.test.tsx` | 1 | The restore confirmation moves focus to Cancel, Escape closes it without restoring, and focus returns to the button (failed before the fix). |
+| `apps/web/src/lib/security-headers.test.ts` | 5 | The header set, HSTS only under https, a closed CSP without remote sources, `ws:` only under http. |
+| `apps/api/test/route-inventory.int.test.ts` | 10 | Every route except the two probes has a finite rate limit; every other route answers 401 without a session, with `Cache-Control: no-store`; 9 hostile body shapes, hostile path parameters and queries on every route never cause a 5xx, a non-envelope error or text matching internals; CORS allow-list and the Origin check (CSRF). |
+| `apps/api/test/activity-prune.int.test.ts` | 4 | Rows older than the retention period are deleted, newer ones kept; a backlog larger than one batch is cleared; two prunes at once are safe; nothing else is touched. |
+| `apps/collab/test/abuse.int.test.ts` (`LEAK`) | 1 | Registered contexts, Hocuspocus connections and loaded documents return to zero after 10 rounds of eight connections, abusive closes included. |
+| `apps/collab/test/versions.int.test.ts` | 1 | Two restores and further edits leave every earlier snapshot byte-identical and delete none; exactly two PRE_RESTORE snapshots are added (G7). |
+
+#### Owner verification on the owner's machine (2026-11-25)
+
+**Environment:** the owner's Windows machine (Git Bash); PostgreSQL 17 and Redis 7 from the project's Docker Compose (PostgreSQL on host port 5433); pnpm 12.18.0, Vitest 5.1.0, Prisma 7.10.1 (the Prisma CLI printed a major-version update notice, not applied), Playwright Chromium (Chrome for Testing 158.0.8127.18). The Node version was not recorded in this session.
+
+| Check | Result |
+|---|---|
+| `pnpm infra:up`, `docker ps` | PostgreSQL (`postgres:17-alpine`) and Redis (`redis:7-alpine`) healthy |
+| `pnpm install` | Passed; the lockfile was accepted (`Lockfile is up to date`); a second run reported already up to date |
+| `pnpm run build:packages` | Passed for `shared`, `db` and `editor`; `e2e/` and `apps/web/security-headers.ts` present |
+| `pnpm format:check` | **All matched files use Prettier code style.** The 22 untouched files flagged in the preparation environment did not appear, so no `prettier --write` was needed |
+| `pnpm lint` | Clean |
+| `pnpm typecheck` | Passed in all 7 workspace projects, including `e2e` |
+| `pnpm --filter @conote/db migrate:status` | 6 migrations found; database schema up to date. Phase 10 adds no migration, so `migrate deploy` and the scratch-database drift check were not run (the drift check was clean in earlier phases) |
+| `pnpm test --testTimeout=30000`, first full run | **68 files, 1,142 of 1,143 tests passed, 376.98 s.** Failure: `apps/collab/test/cluster-failure.int.test.ts` > "Redis outage and recovery (AC-9.4, U13)" > "the periodic check finds missed committed content without any Redis event"; line 223, `expect(b.collab.cluster.stats().staleDocumentsRepaired).toBeGreaterThanOrEqual(1)` received 0, after the preceding assertion (instance b converged to `one two`) had passed |
+| `pnpm check` (lint, format check, typecheck, test), second full run | **68 files, 1,143 of 1,143 tests passed, 539.28 s** |
+| The failing test alone | **Not run.** Cause **not confirmed**. A likely explanation, not verified: something other than the periodic check (a Redis event, for instance) repaired instance b first, so the periodic-repair counter stayed at 0 under load. Treated as a timing-sensitive test; it is the second one in the cluster suite after the Phase 9 message-count test, which did not fail in either run |
+| Browser install | `pnpm exec playwright install chromium` at the repository root failed (`playwright` not found: it is a dependency of the `e2e` package). `pnpm --filter e2e exec playwright install chromium` worked |
+| `pnpm build` | Passed (API, collab and `next build`) |
+| Stack started as production does | API, collab server and `next start` with `NODE_ENV=production`, the API and collab through `node --env-file=../../.env dist/main.js`. The first collab start refused to run because the owner's `.env` was missing `COLLAB_JWT_PUBLIC_KEYS`; after the owner added the keys it started (`cluster: "connected"`). Whether the API was restarted afterwards was not reported; the browser tests, which need collaboration tokens, passed |
+| `pnpm test:e2e` (Chromium, Windows) | **13 of 13 passed, 40.2 s**: 7 `journey` tests and 6 `keyboard` tests (§8.0j) |
+| `docker compose -f infra/docker-compose.yml config` | Reported done by the owner; output not pasted, no error reported |
+
+The browser tests ran once; per-step timings are in the Playwright output only. No Firefox, WebKit, screen reader or mobile check was made.
+
+**Not verified:** GitHub Actions on a clean runner (including the new `e2e` job); the Docker `apps` profile; the cause of the `cluster-failure` failure; Phase 9 PERF figures on the owner's hardware; Firefox, WebKit and screen readers.
+
+### 8.0i Requirement, endpoint and guarantee traceability (AC-10.1; Phase 10, 2026-11-22)
+
+**Method.** Test files and titles were matched to each requirement id by keyword and the matches reviewed by hand; no test names a requirement id, so this table is a judgment by Claude, not a generated link, and is **not owner-verified**. “Browser” marks requirements also exercised by the Playwright specs in `e2e/` (run in a real Chromium; see §8.0j). Group-level categories in §8.1 are unchanged.
+
+**Endpoints (53 ids in API_CONTRACTS plus `/health` and `/ready`).** Measured, not matched: a temporary request hook (reverted) recorded every route pattern and status while the 17 API test files (367 tests, all passing) ran. All 53 contract endpoints and both probes returned a 2xx response at least once. This shows each endpoint is exercised on its success path; the failure paths are covered by the per-area tests above and by `route-inventory.int.test.ts` (401 without a session, malformed input).
+
+| Requirement | Evidence (test file: test or group) | Browser |
+|---|---|---|
+| FR-AUTH-01 | auth.int.test.ts: stores an Argon2id hash and only a hash of the session token | yes |
+| FR-AUTH-02 | auth.int.test.ts: creates the user, a session and a hardened cookie | yes |
+| FR-AUTH-03 | auth.int.test.ts: revokes the session, clears the cookie and rejects the old token | yes |
+| FR-AUTH-04 | auth.int: lists only the caller’s live sessions…; revokes another session…; session-lifecycle.int: expires after 7 days without activity… |  |
+| FR-AUTH-05 | auth.int.test.ts: returns the profile without secrets; auth-flows.test.tsx: updates the profile and reflects it in the auth state |  |
+| FR-AUTH-06 | auth.int.test.ts: changes the hash, keeps this session and revokes every other one |  |
+| FR-AUTH-07 | route-inventory.int: every route outside the public list answers 401 without a session; auth.int: access control middleware | yes |
+| FR-CM-01 | comments.int.test.ts: lets Commenter, Editor and Admin create threads; the thread carries its first comment and ; comment-anchors.test.ts: keeps following the text through edits in other paragraphs and concurrent edits on both si | yes |
+| FR-CM-02 | comments.int.test.ts: lets Commenters reply, in order, and refuses Viewers | yes |
+| FR-CM-03 | comments.int.test.ts: resolves and reopens, idempotently, recording who and logging activity once per change | yes |
+| FR-CM-04 | comment-anchors.test.ts: draws one highlight per open thread, none for resolved ones, and never touches the documen; comments-versions.test.tsx: lists threads with quoted text, author and replies, and marks a thread whose text is gone  |  |
+| FR-CM-05 | comments.int.test.ts: lets the author and an admin delete, not another commenter; deleted bodies disappear |  |
+| FR-CM-06 | comments.int.test.ts: lets Commenter, Editor and Admin create threads; the thread carries its first comment and ; auth.int.test.ts: describe: viewer and commenter restrictions (RO) |  |
+| FR-ED-01 | editor-behavior.test.ts: headings 1-3 and paragraphs | yes |
+| FR-ED-02 | editor-behavior.test.ts: bold, italic and underline |  |
+| FR-ED-03 | editor-behavior.test.ts: bullet, ordered and nested lists |  |
+| FR-ED-04 | editor-behavior.test.ts: checklists with toggleable items |  |
+| FR-ED-05 | editor-behavior.test.ts: links accept http(s) and mailto, and refuse javascript: |  |
+| FR-ED-06 | assets.int.test.ts: only the uploader may upload, and only with the announced type; page-editor.test.tsx: uploads through the three-step flow and inserts the image |  |
+| FR-ED-07 | editor-behavior.test.ts: tables: insert, add/remove rows and columns, delete |  |
+| FR-ED-08 | slash-commands.test.ts: lists every command for an empty query, in menu order; page-editor.test.tsx: lists every command for a bare slash, including the image command | yes |
+| FR-ED-09 | registry.test.ts: registers the approved features |  |
+| FR-PG-01 | pages.int.test.ts: creates root and nested pages, defaulting the title to Untitled | yes |
+| FR-PG-02 | pages.int: returns a page with breadcrumbs, and renames or re-icons it | yes |
+| FR-PG-03 | pages.int: moves a subtree and publishes an access event; orders siblings by position and honours afterPageId |  |
+| FR-PG-04 | pages.int.test.ts: soft-deletes a whole subtree in one batch and hides it |  |
+| FR-PG-05 | pages.int: orders siblings by position…; workspace-flows.test: page tree navigation | yes |
+| FR-PG-06 | permissions.int.test.ts: lets an override restrict or elevate access for one member |  |
+| FR-PG-07 | sync.int.test.ts: stores edits after the debounce and rebuilds them for the next session; resilience.int.test.ts: stores pending changes on graceful shutdown, tells clients, and recovers after restart | yes |
+| FR-PM-01 | permission-matrix.int.test.ts: as %s; route-inventory.int.test.ts: every route outside the public list answers 401 without a session |  |
+| FR-PM-02 | permissions.int: gives each role its documented capabilities and reports myRole; collab auth.int: viewer and commenter restrictions (RO) |  |
+| FR-PM-03 | auth.int.test.ts: accepts a valid token and syncs |  |
+| FR-PM-04 | access.int.test.ts: session.revoked closes that user's connection and nobody else's; cluster-access.int.test.ts: a removed member is cut off on every instance that holds a connection of theirs |  |
+| FR-PR-01 | presence-bar.test.tsx: shows avatars with initials and the number of people online |  |
+| FR-PR-02 | presence-caret.test: draws a named caret and a selection for a collaborator, as decorations only |  |
+| FR-PR-03 | presence-caret.test.ts: uses the colour at low opacity for the selection |  |
+| FR-PR-04 | presence-browsers.int.test.ts: lists one entry per person even with two tabs, and drops them when both close; presence-bar.test.tsx: shows avatars with initials and the number of people online |  |
+| FR-PR-05 | presence-tracker.test.ts: announces a join once, and never the current person |  |
+| FR-RT-01 | collaboration.test: a joining editor gets the whole document through the sync handshake; two editors editing concurrently converge |  |
+| FR-RT-02 | two-browsers.int.test.ts: shows each other's edits live, in rich text; sync.int.test.ts: two clients see each other's edits in both directions | yes |
+| FR-RT-03 | collaboration.test.ts: concurrent formatting changes keep both marks |  |
+| FR-RT-04 | sync.int.test.ts: two clients see each other's edits in both directions | yes |
+| FR-RT-05 | resilience.int.test.ts: reconnects after a network drop, fetching a fresh token, and merges offline edits |  |
+| FR-RT-06 | presence.int: shows two tabs of one person as two awareness states of the same user id; presence-browsers.int: lists one entry per person even with two tabs | yes |
+| FR-SC-01 | cluster.int.test.ts: two clients on different instances see each other in both directions |  |
+| FR-SC-02 | document-store.int: appendDiff; persisted state vector with several instances; concurrent stores of one page |  |
+| FR-SC-03 | cluster-failure.int.test.ts: limits connections per instance, independently of the other instances; abuse.int.test.ts: limits the connections of one user and frees the slot when one closes |  |
+| FR-SC-04 | resilience.int.test.ts: stores pending changes on graceful shutdown, tells clients, and recovers after restart; cluster.int.test.ts: describe: document durability when an instance fails (AC-9.3) |  |
+| FR-VH-01 | versions.int.test.ts: prunes only automatic snapshots beyond the retention count (U11) |  |
+| FR-VH-02 | versions.int.test.ts: stores a labelled snapshot of the live document with its author and time, and tells every  | yes |
+| FR-VH-03 | versions.int.test.ts: lists newest first with creator and contributors, filters by kind and paginates | yes |
+| FR-VH-04 | versions.int.test.ts: returns the exact stored state as binary, loadable into a Y.Doc | yes |
+| FR-VH-05 | versions.int.test.ts: replaces the content for every collaborator, keeps the replaced state as a PRE_RESTORE sna | yes |
+| FR-VH-06 | versions.int.test.ts: describe: contributors (AC-8.9); permissions.int.test.ts: shows workspace activity to admins only, newest first, with filters and paging |  |
+| FR-WS-01 | workspaces.int.test.ts: creates a workspace with the creator as its owner and logs it | yes |
+| FR-WS-02 | workspaces.int.test.ts: lists only the workspaces the caller belongs to, with their role |  |
+| FR-WS-03 | workspaces.int.test.ts: deletes a workspace only for the owner, after the exact name is retyped |  |
+| FR-WS-04 | workspaces.int: changes roles within the rules and publishes an access event; lists only the workspaces the caller belongs to, with their role |  |
+| FR-WS-05 | workspaces.int: creates a link invitation that expires in 7 days…; revokes pending invitations and rotates the token on resend |  |
+| FR-WS-06 | workspaces.int.test.ts: accepts exactly once, for the invited account only |  |
+| FR-WS-07 | workspaces.int.test.ts: removes members, lets members leave, and protects the owner |  |
+| FR-WS-08 | workspaces.int.test.ts: transfers ownership atomically after re-entering the password |  |
+| NFR-MNT-01 | boundaries.test (module boundaries); lint and typecheck in CI; exact pins in package.json files |  |
+| NFR-MNT-02 | Process requirement, not testable by a test: each phase has acceptance criteria and its documentation changes ship with the behaviour (HANDOVER §1–15). **Proposed for owner acceptance as a documented gap.** | |
+| NFR-REL-01 | G1–G7, see the next table | yes (G7 restore) |
+| NFR-SEC-01 | auth-units.test: produces a salted Argon2id hash with the documented parameters; security.int: production cookie configuration |  |
+| NFR-SEC-02 | permission-matrix.int.test.ts: as %s; access.int.test.ts: session.revoked closes that user's connection and nobody else's |  |
+| NFR-SEC-03 | route-inventory.int.test.ts: garbage bodies on every state-changing route never cause a 5xx or leak internals; abuse.int.test.ts: closes a connection that sends an oversized message, others are unaffected |  |
+| NFR-SEC-04 | security.int.test.ts: limits login attempts per client IP and answers 429 with Retry-After; route-inventory.int.test.ts: every route except the two probes opts in to a finite rate limit |  |
+| NFR-SEC-05 | auth.int: stores an Argon2id hash and only a hash of the session token; workspaces.int: invitation tokenHash is 64 hex characters (hashed at rest) |  |
+
+**Guarantees G1–G7** (the full required-test list is in §6):
+
+| ID | Evidence |
+|---|---|
+| G1 | packages/editor collaboration.test: randomized convergence of real editors; collab cluster.int: updates propagate across instances (AC-9.1); collab versions.int: concurrent editing during a restore; web two-browsers.int; E2E: two browsers edit live in both directions |
+| G2 | packages/db document-store.int: appendDiff, concurrent stores of one page, atomic store (injected failure before the commit leaves state unchanged); collab sync.int: persistence (PERSIST) |
+| G3 | collab resilience.int: disconnection and reconnection (RECON) incl. a client that reconnects and merges its pending changes; PERF-05 lag measured by `apps/collab/bench` (docs/benchmarks/persistence.json, Phase 9, not re-run in Phase 10) |
+| G4 | document-store.int: compaction, rows stored out of order or more than once; collab resilience.int: server restart and recovery (RESTART); cluster.int: document durability when an instance fails (AC-9.3) |
+| G5 | collab cluster-failure.int: Redis outage and recovery (AC-9.4, U13) |
+| G6 | collab access.int: access events (EVENTS) and periodic revalidation without any event; cluster-access.int: on every instance (AC-9.5); auth.int: authorization from the database (PERM) |
+| G7 | packages/db versions.int: snapshots (G7), restore barrier; collab versions.int: restore, failed restores change nothing, the barrier across instances; E2E: restore keeps the replaced state as its own version and restores the earlier content |
+
+**Gaps.** None among the 68 testable ids as matched above. NFR-MNT-02 is a process requirement with no test; accepted by the owner on 2026-11-25 as a documented gap. Several matches are group-level (for example a describe block) and not a single assertion; where a requirement has several clauses (FR-PG-03 concurrency and cycles, FR-SC-03 heartbeats), only the clauses named in the evidence were checked.
+
+### 8.0j Browser tests, keyboard operability, security checklist and findings (AC-10.2, AC-10.3, AC-10.5, AC-10.7, AC-10.8; Phase 10)
+
+**Browser tests (`e2e/`, Playwright 1.65.0, D26).** Run: build and start the stack as production does (`NODE_ENV=production` for the API, collab server and `next start`; the session cookie name differs in development), then `pnpm test:e2e` (`E2E_BASE_URL`, default `http://localhost:3000`; `E2E_CHROMIUM_PATH` only where `playwright install` cannot download a browser). Registration is rate limited (10 an hour per address, by design), so each file registers once and every test gets its own signed-in browser context; to repeat a run within the hour, clear the `conote:rl:*` keys in Redis. Install the browser with `pnpm --filter e2e exec playwright install chromium` (the root `pnpm exec` does not find Playwright). **Owner run, 2026-11-25: 13 of 13 passed on Windows (§8.0h).** **Only Chromium was run** (D26 also names Firefox and WebKit); the CI job `e2e` in `.github/workflows/ci.yml` was written but **has not run on GitHub Actions**.
+
+| Spec | What it does in a real browser | AC |
+|---|---|---|
+| `journey` › register … sign out and back in | Register, create a workspace and a page, edit title and text, reload (content persists), sign out, a protected URL redirects to `/login`, sign in again | 10.2, AC-2.6 |
+| `journey` › two browsers | Two sessions of one account see each other's typing live, both directions | 10.2, G1 |
+| `journey` › comment | Comment on selected text, resolve it, find it under Resolved | 10.2 |
+| `journey` › version | Save a version, change the page, restore: content returns and the replaced state is kept as its own version | 10.2, G7 |
+| `journey` › security headers | The headers are present; no CSP violation or script error during login, editing, slash menu, comments, versions; the session cookie is not readable by scripts | 10.3 |
+| `journey` › image | Upload and display an image under the CSP | 10.2, 10.3 |
+| `journey` › WebSocket URL | The collaboration WebSocket URL has no query string, token or session | 10.3 (V5) |
+| `keyboard` ×6 | Sign in; create a page and open it from the tree; toolbar (one tab stop, arrows, Space toggles Bold); slash menu (arrows, Enter, Escape); comments panel (open, write, post, switch tab); version history (save, open, restore, dialog focus and Escape). Controls are reached with Tab/Shift+Tab or arrows and operated with Enter/Space/Escape, never `focus()` or a click | 10.7 |
+
+**Not covered by any browser test:** Firefox and WebKit, screen readers, mobile and soft keyboards, IME, drag and drop, visual layout, page tree arrow-key navigation (the tree is operated with Tab and Enter; no arrow-key tree pattern is claimed), permissions and invitation screens.
+
+**Security checklist (AC-10.3).** Evidence per item; “verified” means a passing automated test or a measurement named here, not owner verification.
+
+| Item | Evidence | Status |
+|---|---|---|
+| WS §12 Origin allow-list on upgrade | collab `auth.int`: refuses a WebSocket upgrade from a foreign origin | verified |
+| WS §12 TLS only in production | not enforced by configuration (`COLLAB_URL` may be `ws://` in production); a deployment control, to be verified in Phase 11 (AC-11.5) | **open, F4** |
+| WS §12 short-lived EdDSA token, no token in URL | collab `auth.int`: unsigned token, wrong audience, wrong issuer, expired, over-long lifetime refused; api `collab-token.int`: token names user, session and page, no role; browser test: no token in the WebSocket URL | verified |
+| WS §12 authorization from the database, events and periodic revalidation | collab `auth.int`, `access.int`, `cluster-access.int` (G6) | verified |
+| WS §12 read-only enforced on the server | collab `auth.int`: override makes a connection read-only; a read-only client's offline edits are refused on reconnect | verified |
+| WS §12 awareness identity bound to the connection | collab `presence.int`: name and colour from the database; another connection's client id refused; `abuse.int`: only the server-built identity is relayed | verified |
+| WS §12 validated messages, offenders closed | collab `abuse.int`: invalid messages answered `INVALID_MESSAGE` and repeat offenders closed; random garbage frames; malformed Yjs update | verified |
+| WS §12 size, rate and connection limits | collab `abuse.int` (oversize, flood, per-user connections), `presence.int` (awareness rate); leak test | verified |
+| WS §12 no content, tokens or secrets in logs | api `security.int`; and a scan of the real API (388 lines), collab (36) and web (181) logs of an E2E run that typed distinctive text, used a known password and issued real cookies and tokens: 0 matches for the text, password, JWTs, cookie values or key material; request logs hold method, URL, host and address only | verified (one run) |
+| ARCH §10.1 password and session handling | api `auth-units`, `auth.int` (Argon2id, hashed session token, uniform login failure), `session-lifecycle.int` | verified |
+| ARCH §10.2 cookie | api `security.int` (production `__Host-` cookie, `Secure`, `Path=/`, no `Domain`, cleared identically); browser test: not readable by scripts | verified |
+| ARCH §10.3 proxy and client address | api `security.int` (3 tests on trusted and untrusted forwarding) | verified |
+| ARCH §10.4 CSRF, CORS | `route-inventory.int`: allow-listed origin gets itself and credentials, never `*`; foreign origins get no allow-origin; a state-changing request from a foreign or missing Origin answers 403 `INVALID_ORIGIN` | verified |
+| ARCH §10.4 response headers | API: Helmet (observed in a live response) and `no-store` on every `/api` route (`route-inventory.int`); web: D70 and `security-headers.test` | verified; **F3** |
+| ARCH §10.4 rate limiting | `route-inventory.int`: every route except `/health` and `/ready` has a finite limit; `security.int` behaviour tests | verified |
+| ARCH §10.4 input validation, error leakage | `route-inventory.int` malformed-input pass over all state-changing routes and parameterized GETs | verified |
+| ARCH §10.4 authorization | `permission-matrix.int`, `permissions.int`, collab `access.int`; 401 on every protected route | verified |
+| ARCH §10.5 web authentication flow | `web-auth.int` (HTTP level) and the browser journey (redirect to login, session, sign-out) | verified |
+| NFR-SEC-01…05 | §8.0i | verified |
+
+**Findings (severity is Claude's estimate; owner decision where marked).**
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| F1 | A path parameter over 100 characters was answered in Fastify's own shape with its internal code and the URL echoed back | Low | Fixed (D68, accepted) |
+| F2 | The restore confirmation dropped keyboard focus to the page body and ignored Escape | Medium (accessibility: a keyboard user could not reach the confirmation) | Fixed; unit and browser tests |
+| F3 | The web app sent no security headers; it now does, but `script-src` needs `'unsafe-inline'` (Next.js inline scripts), which weakens the CSP against XSS | Medium before, Low-Medium after | Headers added (D70, **accepted 2026-11-25**); a nonce-based CSP is an optional later improvement |
+| F4 | “TLS only in production” is not enforced by configuration | Low | **Open**, deployment control (Phase 11, AC-11.5) |
+| F5 | `pnpm audit`: `effect` (high, ReDoS) and `minimatch` (moderate) | Low in context | Accepted as documented (D68) |
+| F6 | A preflight from a foreign origin still returns `Access-Control-Allow-Credentials` and the method list (without allow-origin, so browsers refuse it) | Info | Not changed |
+| F7 | `infra/docker-compose.yml` began with a stray `-`, making it invalid YAML (`docker compose` could not parse it); present in the uploaded zip | Medium for local setup | Fixed; the file now parses (6 services). Owner ran `docker compose config` on 2026-11-25 (reported done, no error) |
+
+**AC-10.5 (optimizations).** One optimization was made: presence (usePresence re-rendering the editor on every remote cursor move): 50 renders → 0 for 50 moves, with a test that fails on regression. The PERF metrics of Phase 9 (`docs/PERFORMANCE.md`) were **not re-measured**: that document's one-core figures are baselines without targets, and a second one-core run would not be comparable. No further optimization was made because no measurement in PERFORMANCE.md shows a missed target (none exist).
+
+**AC-10.8 (guarantee statements re-checked).** README §Planned architecture and ARCHITECTURE §8 (G1–G7) were compared with the tests named in §8.0i. G1, G3–G6 are supported as worded. **G2's verification column said “kill-before/after-commit tests”; the tests are fault injection before the commit and instance-loss tests, so the column was reworded** (ARCHITECTURE §8). **G7's “snapshots are immutable” had no test; one was added** (restore leaves all snapshots byte-identical). README's statement that zero data loss and automatic reconvergence after Redis outages are *not* claimed is consistent with `cluster-failure.int` (reconnecting alone does not repair a missed update).
 
 ### 8.1 Requirements
 

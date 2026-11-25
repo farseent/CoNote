@@ -1,7 +1,7 @@
 # CoNote – Technical Decisions
 
 **Status:** Phase 1 infrastructure implemented and Phase 1b spike executed; Phase 2 authentication and user management implemented and locally verified. D41–D47 explicitly accepted by the project owner on 2026-11-13. Phase 2 GitHub Actions CI was deferred by the owner and later reported as passed by the owner (recorded 2026-11-15). Evidence and remaining limitations are tracked in HANDOVER.md. D54–D57 were accepted by the owner on 2026-11-16 and D58–D60 on 2026-11-18. D61 (Phase 7) was accepted on 2026-11-19, and D62 and D63 (Phase 8) on 2026-11-20.
-**Last updated:** 2026-11-21 (Phase 9: D64–D67 accepted by the owner after local verification; U13 resolved by D64). Previously 2026-11-20 (Phase 8: D62 and D63 accepted; U8 resolved; U11 resolved for snapshots)
+**Last updated:** 2026-11-25 (Phase 10: D69 and D70 accepted by the owner after local verification; NFR-MNT-02 accepted as a documented gap). Previously 2026-11-21 (Phase 9: D64–D67 accepted by the owner after local verification; U13 resolved by D64). Previously 2026-11-20 (Phase 8: D62 and D63 accepted; U8 resolved; U11 resolved for snapshots)
 **Owner:** Project owner (approvals) / Claude (drafting)
 
 This is the permanent decision register for CoNote. Decision IDs (`D#`) and unresolved-question IDs (`U#`) are **permanent**: they are never renumbered or reused. A changed decision is recorded by adding a new decision that supersedes the old one and updating the old one's status.
@@ -593,6 +593,26 @@ Protected pages call `requireUser()` (server component, asks the API with the fo
 - **Decision:** do not build sticky routing in Phase 9. Revisit when a multi-core run shows per-document CPU or Redis traffic as the limit. Correctness never depends on it (any instance serves any document).
 - **Unverified:** the connection URL's ability to carry the page id for a balancer to route on was not checked against the client; a multi-core measurement was not made.
 
+### D68 – Phase 10 router errors and dependency-audit disposition
+
+- **Status:** Accepted by the owner (2026-11-22), option (a): both advisories accepted as documented; no override added.
+- **Router errors.** Fastify rejects some requests before any route or hook runs (a path parameter over its 100-character limit, a malformed URL). Its default answer used its own JSON shape, an internal error code and the request URL echoed back. `buildApp` now passes a `frameworkErrors` handler: an overlong parameter answers `404 NOT_FOUND`, a malformed URL `400 VALIDATION_ERROR`, both in the standard envelope (D31) with no echo of the input. Evidence: `apps/api/test/route-inventory.int.test.ts`.
+- **Dependency audit (`pnpm audit`, 2026-11-22; 2 advisories, 663 packages).** (1) `effect` ≤ 3.22.0, high, ReDoS in `Schema.TemplateLiteral`; patched 3.22.1; reached only through `prisma` → `@prisma/config` (pinned `effect` 3.20.0), which `packages/db/prisma.config.ts` uses at tooling time. The shipped code of `@prisma/config` contains no reference to `TemplateLiteral`; Prisma's use of `effect` elsewhere was not reviewed. (2) `minimatch` 10.2.6, moderate, glob-pattern DoS; patched 11.0.1; reached only through ESLint 10, a development dependency. **Nothing was changed.** Forcing either version would override a transitive pin (`CLAUDE.md` §4 rule 10) and change the lockfile.
+- **Options considered:** (a) accept both as documented, upgrade when Prisma and ESLint do (recommended: neither is reachable at runtime from untrusted input, as far as reviewed) – **chosen**; (b) add a `pnpm.overrides` entry for `effect` 3.22.1 and run the full suite and CI. Re-run `pnpm audit` when Prisma or ESLint is upgraded.
+
+### D69 – Activity-log retention (U11)
+
+- **Status:** Accepted by the owner (2026-11-25; proposed 2026-11-22, Phase 10), with the proposed 365-day default. The value was Claude's proposal and the owner confirmed it without change.
+- **Decision proposed:** activity-log rows older than `ACTIVITY_LOG_RETENTION_DAYS` (default 365, allowed 7–3650) are deleted by an API background job (`apps/api/src/jobs/activity-prune.ts`), run at start and every 6 hours, in batches of 5,000 oldest rows with `FOR UPDATE SKIP LOCKED`, so several API instances can run it safely. AUTO snapshots keep the Phase 8 rule (D63); MANUAL and PRE_RESTORE snapshots are never pruned.
+- **Consequence:** the workspace activity view (`ACT-01`) shows at most one year of history by default. The job scans the table (no index on `createdAt` alone); adding one needs a migration and was not done. Evidence: `apps/api/test/activity-prune.int.test.ts` (4 tests).
+
+### D70 – Web response headers and the page CSP
+
+- **Status:** Accepted by the owner (2026-11-25; proposed 2026-11-22, Phase 10), as proposed. The nonce-based CSP was not requested; it remains an optional later improvement (F3 in TESTING §8.0j).
+- **Decision proposed:** every web response carries `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin` and a restrictive `Permissions-Policy`; `Strict-Transport-Security` is added when `APP_URL` is https (`apps/web/security-headers.ts`, resolved at build time). The CSP closes framing, plugins, foreign form targets, base-URL changes and all remote resources; `connect-src` allows `'self'` and `wss:` (plus `ws:` only when `APP_URL` is http), because the collaboration URL is handed to the browser at run time.
+- **Trade-off, owner decision:** `script-src` includes `'unsafe-inline'`, because Next.js inlines its bootstrap scripts. That weakens the CSP as an XSS mitigation. The stronger option is a per-request nonce, which needs a Next.js proxy file (D46 says there is none) and every page rendered dynamically (they already are). Not done here.
+- **Evidence:** `apps/web/src/lib/security-headers.test.ts`; Playwright specs assert the headers and fail on any CSP violation during login, editing, the slash menu, comments, versions and an image upload.
+
 ## Unresolved decisions
 
 The "Needed by" column states the phase gate for each item. Resolved items remain listed with their evidence so permanent IDs are preserved.
@@ -608,7 +628,7 @@ The "Needed by" column states the phase gate for each item. Resolved items remai
 | **U8 – RESOLVED (Phase 8, D63 accepted 2026-11-20)** | Behaviour of comment anchors after version restore (D8 + D9) | Mark affected threads "detached" (kept, unanchored); attempt re-anchoring by quoted text | Mark detached, keep thread and quoted text; re-anchoring is a later enhancement | Phase 8 |
 | **U9** | External guests (access to a single page for non-members) | Out of scope for MVP; or add later | Out of scope; revisit after Phase 10 | Phase 3 (confirm out of scope) |
 | **U10** | Production hosting target | Single VM with Docker Compose; managed container platform + managed Postgres/Redis | DEPLOYMENT.md is written provider-neutral (container images + reference topology); owner picks a target before Phase 11 | Phase 11 |
-| **U11 – RESOLVED for snapshots (Phase 8, D63 accepted 2026-11-20); activity-log pruning remains open for Phase 10** | Retention policy for AUTO snapshots and activity logs | Keep all; prune AUTO snapshots by age/count while always keeping MANUAL and PRE_RESTORE; time-based activity pruning | Keep MANUAL and PRE_RESTORE indefinitely, prune AUTO snapshots by a policy chosen from Phase 9 growth measurements; activity logs kept until Phase 10 review | Phase 8 (snapshot rules) / Phase 10 (implementation) |
+| **U11 – RESOLVED for snapshots (Phase 8, D63 accepted 2026-11-20); activity-log pruning implemented in Phase 10 as D69, accepted by the owner on 2026-11-25 with the 365-day default** | Retention policy for AUTO snapshots and activity logs | Keep all; prune AUTO snapshots by age/count while always keeping MANUAL and PRE_RESTORE; time-based activity pruning | Keep MANUAL and PRE_RESTORE indefinitely, prune AUTO snapshots by a policy chosen from Phase 9 growth measurements; activity logs kept until Phase 10 review | Phase 8 (snapshot rules) / Phase 10 (implementation) |
 | **U12** | Repository license and visibility (public/private) | Permissive open-source license; all rights reserved/private | Owner decides; until decided the repository states "License: not yet chosen" | Before the repository is made public (no later than Phase 11) |
 | **U13 – RESOLVED by D64 (Phase 9, 2026-11-21; accepted by the owner 2026-11-21)** | Which explicit Phase 9 recovery mechanism detects and reconciles documents after Redis Pub/Sub message loss? | Server-to-server reconciliation: PostgreSQL comparison of open documents plus state-vector re-announcement, after every Redis reconnection and on a timer. Redis reconnect alone is proven insufficient by test. Forced client reconnect kept as the documented fallback. | Phase 9 (done; see D64) |
 

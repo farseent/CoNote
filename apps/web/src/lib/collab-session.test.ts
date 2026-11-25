@@ -446,3 +446,60 @@ describe('version history commands and events (Phase 8, WEBSOCKET_PROTOCOL §7, 
     expect(session.getState().phase).toBe('live');
   });
 });
+
+describe('overlapping connection attempts (Phase 10)', () => {
+  function deferred() {
+    let resolve!: (value: CollabTokenResponse) => void;
+    const promise = new Promise<CollabTokenResponse>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  it('a double "Reconnect now" while the token fetch is pending leaves one live provider', async () => {
+    const waiting: ReturnType<typeof deferred>[] = [];
+    let first = true;
+    const session = make(() => {
+      if (first) {
+        first = false;
+        return Promise.resolve(info());
+      }
+      const d = deferred();
+      waiting.push(d);
+      return d.promise;
+    });
+    session.start();
+    await flush();
+    latest().config.onSynced();
+    latest().config.onStatus({ status: 'disconnected' });
+    expect(session.getState().phase).toBe('offline');
+    session.retry();
+    session.retry(); // the double click
+    for (const d of waiting) d.resolve(info());
+    await flush();
+    expect(providers.filter((p) => !p.destroyed)).toHaveLength(1);
+  });
+
+  it('an older, slower attempt never replaces a newer one', async () => {
+    const older = deferred();
+    const newer = deferred();
+    const queue = [older, newer];
+    const session = new CollabSession({
+      pageId: PAGE,
+      fetchToken: () => queue.shift()!.promise,
+      retryDelaysMs: [10, 20],
+    });
+    sessions.push(session);
+    session.start();
+    // Force a second attempt before the first resolves (state is 'connecting' → use retry path).
+    (session as unknown as { open: (o: { keepDocument: boolean }) => Promise<void> }).open({
+      keepDocument: false,
+    });
+    newer.resolve(info({ token: 'tok-new' }));
+    await flush();
+    older.resolve(info({ token: 'tok-old' }));
+    await flush();
+    expect(providers).toHaveLength(1);
+    expect(await latest().config.token()).toBe('tok-new');
+  });
+});

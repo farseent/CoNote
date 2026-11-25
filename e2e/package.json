@@ -1,0 +1,16 @@
+{
+  "name": "@conote/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end and keyboard-operability tests in real browsers (docs/TESTING.md §5.11, AC-10.2, AC-10.7)",
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "@types/node": "24.19.2",
+    "typescript": "5.9.3"
+  }
+}

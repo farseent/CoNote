@@ -234,6 +234,43 @@ describe('automatic snapshots (D63)', () => {
 });
 
 describe('restore (AC-8.5, AC-8.6)', () => {
+  it('leaves every existing snapshot byte-identical and deletes none (G7, Phase 10)', async () => {
+    const h = await start();
+    const { owner, pageId } = await scene(h, []);
+    const a = await h.connect(owner, pageId);
+    addParagraph(a.doc, 'first');
+    await command(a, 'version.create', { label: 'v1' });
+    addParagraph(a.doc, 'second');
+    await command(a, 'version.create', { label: 'v2' });
+    const before = await snapshotsOf(h, pageId);
+    expect(before).toHaveLength(2);
+    const fingerprint = (rows: typeof before) =>
+      rows.map((r) => ({
+        id: r.id,
+        label: r.label,
+        kind: r.kind,
+        createdAt: r.createdAt.getTime(),
+        createdById: r.createdById,
+        state: Buffer.from(r.state).toString('base64'),
+      }));
+    const expected = fingerprint(before);
+
+    // Restore the older version, edit, then restore the newer one: two restores, more edits.
+    expect(isOk(await command(a, 'version.restore', { versionId: before[0]!.id }))).toBe(true);
+    await until(() => paragraphs(a.doc).join('|') === 'first', 'first restored');
+    addParagraph(a.doc, 'third');
+    expect(isOk(await command(a, 'version.restore', { versionId: before[1]!.id }))).toBe(true);
+    await until(() => paragraphs(a.doc).join('|') === 'first|second', 'second restored');
+
+    const after = await snapshotsOf(h, pageId);
+    const byId = new Map(fingerprint(after).map((r) => [r.id, r]));
+    for (const original of expected)
+      expect(byId.get(original.id), original.label ?? original.id).toEqual(original);
+    // Two restores added exactly two PRE_RESTORE snapshots and nothing else changed.
+    expect(after.filter((r) => r.kind === 'PRE_RESTORE')).toHaveLength(2);
+    expect(after).toHaveLength(before.length + 2);
+  });
+
   it('replaces the content for every collaborator, keeps the replaced state as a PRE_RESTORE snapshot, records the event', async () => {
     const h = await start();
     const { owner, members, pageId } = await scene(h, ['EDITOR']);

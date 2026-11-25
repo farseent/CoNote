@@ -216,3 +216,39 @@ describe('application messages and limits (LIMITS)', () => {
     await Promise.all([a, b].map((x) => x.destroy()));
   });
 });
+
+describe('no state outlives its connections (LEAK, Phase 10)', () => {
+  it('returns to zero connections, registered contexts and loaded documents after many open/close cycles, abusive ones included', async () => {
+    const h = await start({ config: { maxPayloadBytes: 64 * 1024 } });
+    const { owner, other, workspaceId } = await pair(h);
+    const pages = await Promise.all([1, 2, 3, 4].map(() => h.page(workspaceId, owner)));
+    for (let round = 0; round < 10; round += 1) {
+      const clients = await Promise.all(
+        pages.flatMap((page) => [h.connect(owner, page), h.connect(other, page)]),
+      );
+      clients[0]!.insert(`round ${round}`);
+      if (round % 3 === 0) {
+        // An abusive close: an oversized frame makes the server drop this connection.
+        const abusive = clients[1]!;
+        const closed = new Promise<void>((resolve) =>
+          rawSocket(abusive).once('close', () => resolve()),
+        );
+        rawSocket(abusive).send(
+          syncUpdateFrame(documentNameForPage(pages[0]!), new Array(100 * 1024).fill(1)),
+        );
+        await closed;
+      }
+      await Promise.all(clients.map((c) => c.destroy()));
+    }
+    await until(
+      () =>
+        h.collab.registry.size === 0 &&
+        h.collab.server.hocuspocus.getConnectionsCount() === 0 &&
+        h.collab.server.hocuspocus.getDocumentsCount() === 0,
+      'all connection and document state released',
+      15_000,
+    );
+    expect(h.collab.registry.size).toBe(0);
+    expect(h.collab.server.hocuspocus.getDocumentsCount()).toBe(0);
+  });
+});
