@@ -9,6 +9,8 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify:deployment": "tsx scripts/verify-deployment.ts",
+    "measure:deployment": "tsx scripts/measure-deployment.ts",
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {

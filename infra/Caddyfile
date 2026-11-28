@@ -1,0 +1,23 @@
+# CoNote production reverse proxy (docs/DEPLOYMENT.md §6, §14). Caddy obtains and renews the
+# certificates itself (Let's Encrypt), redirects http to https, speaks WebSocket without extra
+# settings and sets X-Forwarded-For/-Proto/-Host for the upstream.
+#
+# Variables come from the compose file: APP_DOMAIN, COLLAB_DOMAIN, ACME_EMAIL.
+{
+	email {$ACME_EMAIL}
+}
+
+# Public web entry: pages and the /api/* rewrite to the private API.
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+
+# Public collaboration entry: long-lived WebSocket connections to the Hocuspocus server.
+# Origin is forwarded unchanged; the server checks it against COLLAB_ALLOWED_ORIGINS (D25).
+{$COLLAB_DOMAIN} {
+	reverse_proxy collab:4100 {
+		health_uri /health
+		health_interval 15s
+	}
+}

@@ -219,3 +219,101 @@ describe('logging helpers', () => {
     );
   });
 });
+
+describe('production transport rules (Phase 11, AC-11.5)', () => {
+  const publicApi = {
+    NODE_ENV: 'production',
+    DATABASE_URL: validApi.DATABASE_URL,
+    REDIS_URL: validApi.REDIS_URL,
+    APP_URL: 'https://app.example.com',
+    COLLAB_URL: 'wss://collab.example.com',
+  };
+  const publicCollab = {
+    NODE_ENV: 'production',
+    DATABASE_URL: validApi.DATABASE_URL,
+    REDIS_URL: validApi.REDIS_URL,
+    APP_URL: 'https://app.example.com',
+    COLLAB_JWT_PUBLIC_KEYS: JSON.stringify([{ kty: 'OKP', crv: 'Ed25519', x: 'AAAA', kid: 'k1' }]),
+  };
+
+  it('accepts a public https/wss deployment', () => {
+    expect(() => parseEnv('api', apiEnvSchema, publicApi)).not.toThrow();
+    expect(() => parseEnv('collab', collabEnvSchema, publicCollab)).not.toThrow();
+    expect(() =>
+      parseEnv('web', webEnvSchema, {
+        NODE_ENV: 'production',
+        APP_URL: 'https://app.example.com',
+        API_INTERNAL_URL: 'http://api:4000',
+      }),
+    ).not.toThrow();
+  });
+
+  it('refuses plain http for a public APP_URL in all three services', () => {
+    const http = 'http://app.example.com';
+    expect(() => parseEnv('api', apiEnvSchema, { ...publicApi, APP_URL: http })).toThrow(/APP_URL/);
+    expect(() => parseEnv('collab', collabEnvSchema, { ...publicCollab, APP_URL: http })).toThrow(
+      /APP_URL/,
+    );
+    expect(() =>
+      parseEnv('web', webEnvSchema, {
+        NODE_ENV: 'production',
+        APP_URL: http,
+        API_INTERNAL_URL: 'http://api:4000',
+      }),
+    ).toThrow(/APP_URL/);
+  });
+
+  it('refuses ws:// for a public COLLAB_URL and a loopback COLLAB_URL behind a public APP_URL', () => {
+    expect(() =>
+      parseEnv('api', apiEnvSchema, { ...publicApi, COLLAB_URL: 'ws://collab.example.com' }),
+    ).toThrow(/COLLAB_URL/);
+    expect(() =>
+      parseEnv('api', apiEnvSchema, { ...publicApi, COLLAB_URL: 'wss://localhost:4100' }),
+    ).toThrow(/this machine/);
+    // The default (ws://localhost:4100) must not slip through unnoticed on a public deployment.
+    const { COLLAB_URL: _omitted, ...withoutCollabUrl } = publicApi;
+    expect(() => parseEnv('api', apiEnvSchema, withoutCollabUrl)).toThrow(/COLLAB_URL/);
+  });
+
+  it('refuses an insecure entry of the origin allow-lists', () => {
+    expect(() =>
+      parseEnv('api', apiEnvSchema, {
+        ...publicApi,
+        ALLOWED_ORIGINS: 'https://app.example.com,http://other.example.com',
+      }),
+    ).toThrow(/ALLOWED_ORIGINS/);
+    expect(() =>
+      parseEnv('collab', collabEnvSchema, {
+        ...publicCollab,
+        COLLAB_ALLOWED_ORIGINS: 'http://other.example.com',
+      }),
+    ).toThrow(/COLLAB_ALLOWED_ORIGINS/);
+  });
+
+  it('keeps loopback addresses working in production and applies nothing outside production', () => {
+    expect(() =>
+      parseEnv('api', apiEnvSchema, {
+        ...publicApi,
+        APP_URL: 'http://localhost:3000',
+        COLLAB_URL: 'ws://localhost:4100',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      parseEnv('api', apiEnvSchema, {
+        ...publicApi,
+        NODE_ENV: 'development',
+        APP_URL: 'http://app.example.com',
+        COLLAB_URL: 'ws://collab.example.com',
+      }),
+    ).not.toThrow();
+  });
+
+  it('never prints a value in the error', () => {
+    try {
+      parseEnv('api', apiEnvSchema, { ...publicApi, APP_URL: 'http://secret-host.example.com' });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as Error).message).not.toContain('secret-host');
+    }
+  });
+});

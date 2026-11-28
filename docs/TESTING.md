@@ -1,7 +1,7 @@
 # CoNote – Testing Strategy
 
-**Status:** Phase 1a test foundation (reported passing by the owner: 9 files, 59 tests) plus **Phase 2 authentication tests, run by Claude in a preparation environment: 17 files, 228 tests passed (115 unit + 113 integration), twice in a row** (§8.0a). The Phase 1b spike harness is under `spikes/collab-poc/`. **Phase 3 tests were run by the owner on 2026-11-15 against PostgreSQL and Redis: `pnpm check` passed with 482 tests** (§8.0b). **Phase 5 (Yjs integration) tests were run by the owner on 2026-11-16: 43 files, 802 tests passed on Node 24.18.0 and PostgreSQL 17** (§8.0d). There is no network collaboration yet (Phase 6), so no collaboration test runs through a server or a browser. **Browser E2E (Playwright) is not implemented.**
-**Last updated:** 2026-11-21 (owner verification of Phase 9 recorded in §8.0e (Phase 9); Phase 8 tests added: §8.0g; owner verification of Phase 8 recorded in §8.0g)
+**Status (Phase 11, 2026-11-26):** **69 files, 1,154 tests passed** in the preparation environment, plus 13 browser tests and a 24-check black-box deployment verification on a production-topology rehearsal; **no real deployment was tested** (§8.0k). Earlier status notes follow for history. **Earlier status:** Phase 1a test foundation (reported passing by the owner: 9 files, 59 tests) plus **Phase 2 authentication tests, run by Claude in a preparation environment: 17 files, 228 tests passed (115 unit + 113 integration), twice in a row** (§8.0a). The Phase 1b spike harness is under `spikes/collab-poc/`. **Phase 3 tests were run by the owner on 2026-11-15 against PostgreSQL and Redis: `pnpm check` passed with 482 tests** (§8.0b). **Phase 5 (Yjs integration) tests were run by the owner on 2026-11-16: 43 files, 802 tests passed on Node 24.18.0 and PostgreSQL 17** (§8.0d). There is no network collaboration yet (Phase 6), so no collaboration test runs through a server or a browser. **Browser E2E (Playwright) is not implemented.**
+**Last updated:** 2026-11-26 (Phase 11 report, §8.0k). Previously 2026-11-21 (owner verification of Phase 9 recorded in §8.0e (Phase 9); Phase 8 tests added: §8.0g; owner verification of Phase 8 recorded in §8.0g)
 
 Decision IDs (`D#`, `U#`) are in [DECISIONS.md](DECISIONS.md); requirements and metrics (`FR-*`, `NFR-*`, `PERF-*`) in [PROJECT_MASTER.md](PROJECT_MASTER.md); guarantees `G1`–`G7` in [ARCHITECTURE.md](ARCHITECTURE.md) §8; phases and acceptance criteria (`AC-*`) in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
@@ -620,6 +620,61 @@ GitHub Actions is the confirmed CI provider; the Phase 1a workflow is configured
 | `pnpm test` | Both projects | Yes |
 
 Integration tests **fail** (they do not skip) if `DATABASE_URL`/`REDIS_URL` are missing. The GitHub Actions verification job runs on `ubuntu-latest`, so the real-process tests exercise the production SIGTERM handlers and require exit code 0 in CI. Windows local runs still verify that both child processes start, serve their health/readiness endpoints, and terminate; they do not claim to verify graceful SIGTERM handling. Playwright (E2E) is not configured yet; it arrives with the first end-to-end flow (Phase 2).
+
+### 8.0k Phase 11 testing report: production preparation and rehearsal (written and run by Claude, preparation environment, 2026-11-26)
+
+**Scope and honesty.** Phase 11 added no product feature. It added production start-up rules (D72), a black-box verification script, a key-rotation test, production packaging and a restore drill, and ran them on a **one-machine production-topology rehearsal**. **No real deployment exists, so no test below was run against one** (DEPLOYMENT.md §16.A). Where this section says "verified", it means on the rehearsal.
+
+**Environment:** Linux, 1 vCPU, 4 GB; Node v24.22.3, pnpm 12.18.0; PostgreSQL **16.x** (the owner's target is 17), Redis 7.0.15; Caddy 2.6.2 with a local certificate authority; Chromium from the sandbox's Playwright installation. The schema was created by applying the six migration SQL files with `psql`, and the `_prisma_migrations` table was reproduced by hand with each file's SHA-256, because the Prisma engine binaries cannot be downloaded there (**`prisma migrate deploy` was not run in Phase 11**; the owner ran it in earlier phases).
+
+| Check | Result |
+|---|---|
+| Typecheck (`pnpm typecheck`), lint (`pnpm lint`), format check (`pnpm format:check`) | clean (after formatting two files, below) |
+| Full suite, run in two halves because the sandbox stops its database between commands: `apps/collab` | **12 files, 154 tests passed**, 112 s |
+| Full suite, the rest (`apps/api`, `apps/web`, `packages`, `tests`) | **57 files, 1,000 tests passed**, 146 s |
+| **Total** | **69 files, 1,154 tests passed** (Phase 10 baseline 68 files / 1,143; **+11 tests, +1 file**: 6 production-transport tests in `shared.test.ts`, 5 key-rotation tests in `apps/collab/src/token-rotation.test.ts`) |
+| An earlier single run of the same suite | 1,142 passed, **7 failed**: all seven returned `503` from `/ready` because the sandbox database had no `_prisma_migrations` table (the readiness check reads it). After reproducing that table the seven files passed (57 tests, with the new ones). This is a sandbox artifact, not a code defect, but it shows the readiness check does what it says |
+| `pnpm verify:deployment` (24 black-box checks) through HTTPS and `wss://collab.localhost` | **24 passed**, 0 failed (details and checks: DEPLOYMENT §15) |
+| `pnpm test:e2e` (13 Playwright tests, real Chromium) through the same TLS topology | **13 passed** |
+| Restore drill (`scripts/backup-postgres.sh`, `scripts/restore-drill.sh`) | 15 tables identical; **negative control** (one row altered after the dump) correctly **failed**; passed again after reverting |
+| Log scan after all runs | 0 error-level lines; none of the test password, JWT text, session cookie, key `d` value, database password or document text found |
+| Client address through Caddy → Next.js → API | forwarded and used as the rate-limit key; a client-supplied `X-Forwarded-For` was replaced by Caddy (loopback hops only) |
+| `caddy validate`, Compose YAML parse, Compose environment vs the three env schemas | valid / parses / valid |
+
+**Mapping of the Phase 11 verification list to evidence** (R = rehearsal, a real deployment is **not verified** for any row):
+
+| Item | Evidence |
+|---|---|
+| User registration and login | verify script (3 registrations, wrong-password `401`, session with/without cookie); e2e journey 1 — R |
+| Workspace creation, page creation | verify script; e2e journey 1 — R |
+| Rich-text editing | e2e journeys 1, 5, 6 and keyboard specs (toolbar, slash menu) — R |
+| Multiple users editing simultaneously | verify script (two users over the cross-origin `wss://`); e2e journey 2 (two browsers, both directions); Phase 6/9 integration tests — R |
+| Live cursors, presence | verify script checks the server-stamped identity and cursor arrive at the other user; the **visual** rendering of moving cursors in two real browsers was owner-verified locally in Phase 7 and is a manual item for a deployment (DEPLOYMENT §15 C) — R |
+| Comments | verify script (owner creates, viewer reads, viewer cannot create); e2e journey 3 — R |
+| Version history | verify script (create over WebSocket, listed over REST, viewer refused); e2e journey 4 — R |
+| Permission restrictions | verify script: non-member `404`, viewer cannot write/create/comment/save a version, a viewer's WebSocket edit is neither relayed nor stored, removal ends access at once; Phase 3/10 permission matrix (133 tests) — R |
+| Document persistence | verify script: a fresh connection loads the document after every client left — R |
+| Recovery after disconnection | verify script: edit made offline reaches the other user after reconnecting; Phase 6/9 resilience tests — R |
+| Cross-origin communication, secure cookies, HTTPS/WSS, CORS | verify script (cookie attributes, foreign `Origin` refused on REST and WebSocket, forged token refused, `wss://` address) — R |
+| Production error handling and logging | log scan; Phase 10 tests (no `5xx` or leaked internals on garbage input) — R |
+
+**Findings of Phase 11** (none is a regression of earlier behaviour):
+
+| # | Finding | Disposition |
+|---|---|---|
+| F11-1 | `infra/Dockerfile.web` had no `APP_URL` build argument, so a Docker-built web image would ship without HSTS and with `ws:` allowed in the CSP | Fixed (`ARG APP_URL`; the production Compose file passes it) |
+| F11-2 | The API image's `node` user could not write to a freshly mounted uploads volume | Fixed (`/data/assets` created and owned by `node`; `ASSET_STORAGE_DIR` set in the image) |
+| F11-3 | DEPLOYMENT.md listed environment variables the code never reads (`COLLAB_PUBLIC_URL`, `COLLAB_JWT_KID`, `COLLAB_JWT_TTL_SECONDS`, `S3_*`, `EMAIL_ADAPTER`, `ASSET_*`, `PAGE_PURGE_RETENTION_DAYS`) and omitted real ones | Fixed: §4 now matches `packages/shared/src/env.ts` |
+| F11-4 | In production an `http://`/`ws://` public URL, or the unset default `COLLAB_URL` behind a public `APP_URL`, started without complaint and failed only in the browser | Fixed by D72 (proposed) |
+| F11-5 | The rotation procedure was documented but only "unknown `kid` is refused" was tested | Test added (5 tests) |
+| F11-6 | My first `verify:deployment` run showed one failure: a body-less `DELETE` was refused with `415` by the API's CSRF rule | Script defect, fixed in the script; the server was right |
+| F11-7 | `packages/db/test/workspace-constraints.int.test.ts` was not Prettier-formatted, so `pnpm format:check` (and CI) would fail | Formatted (whitespace only) |
+| F11-8 | Observation: the per-account rate-limit keys read `undefinedundefined-login-account:<email>` because `createRateLimit` is called outside a route, so the library's method-and-URL prefix is empty | **Not changed**: keys stay unique per account and separated by their own prefix; cosmetic. Worth tidying later |
+| F11-9 | Stale status text in README, WEBSOCKET_PROTOCOL, API_CONTRACTS, ARCHITECTURE | Fixed (§ "Phase 11 documentation review" in HANDOVER §16) |
+
+**Not tested (do not infer from the above):** the Docker images and the production Compose file (never built or run); Let's Encrypt issuance; real DNS; PostgreSQL 17 in this phase; any network between a browser and a server; a real phone or a second network; Firefox and WebKit; GitHub Actions on the Phase 10/11 changes; behaviour under a real proxy chain in Docker (`TRUST_PROXY=uniquelocal`); a full disaster recovery (a new server from backups).
+
+**Performance (Phase 11):** no new load test. The Phase 9 benchmarks stand (PERFORMANCE.md, one shared vCPU, in-process, no TLS). A spot measurement **through TLS and Caddy on the rehearsal machine** (`pnpm measure:deployment`, 200 samples, loopback, one run) gave: authenticated `GET /api/v1/auth/session` p50 5.11 ms, p95 9.82 ms, p99 12.74 ms, max 15.79 ms; an edit reaching a second connection over `wss://` p50 1.65 ms, p95 3.10 ms, p99 8.46 ms, max 9.60 ms. These contain no network latency and are **not** deployment performance; see PERFORMANCE.md §9.
 
 ### 8.0d Phase 5 tests (written 2026-11-16, executed in a preparation environment and on the owner's machine 2026-11-16)
 

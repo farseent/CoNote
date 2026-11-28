@@ -8,9 +8,18 @@ import { defineConfig } from '@playwright/test';
  *
  * E2E_CHROMIUM_PATH points at a Chromium binary for environments where `playwright install` cannot
  * download one. Leave it unset to use the browser Playwright installs.
+ *
+ * E2E_IGNORE_HTTPS_ERRORS=1 makes Chromium accept untrusted certificates. Use it only against a
+ * local stack behind a reverse proxy with a locally generated CA (docs/DEPLOYMENT.md §16); never
+ * against a real deployment, whose certificate must be valid.
  */
 const baseURL = process.env['E2E_BASE_URL'] ?? 'http://localhost:3000';
 const executablePath = process.env['E2E_CHROMIUM_PATH'];
+const ignoreCertificateErrors = process.env['E2E_IGNORE_HTTPS_ERRORS'] === '1';
+const launchArgs = [
+  ...(executablePath ? ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'] : []),
+  ...(ignoreCertificateErrors ? ['--ignore-certificate-errors'] : []),
+];
 
 export default defineConfig({
   testDir: './tests',
@@ -24,11 +33,11 @@ export default defineConfig({
     baseURL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    ...(executablePath
+    ...(executablePath || launchArgs.length > 0
       ? {
           launchOptions: {
-            executablePath,
-            args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+            ...(executablePath ? { executablePath } : {}),
+            args: launchArgs,
           },
         }
       : {}),

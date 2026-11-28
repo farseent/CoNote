@@ -1,19 +1,38 @@
 import { spawn } from 'node:child_process';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Spawning tsx is slow under parallel load; give the child its own,
+// longer deadline and keep the vitest timeout just above it.
+const CHILD_TIMEOUT_MS = 30_000;
+vi.setConfig({ testTimeout: CHILD_TIMEOUT_MS + 5_000 });
 
 function run(
   entry: string,
   env: Record<string, string>,
 ): Promise<{ code: number | null; out: string }> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--import', 'tsx', entry], {
       env: { PATH: process.env['PATH'] ?? '', ...env },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let out = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(
+        new Error(`${entry} did not exit within ${CHILD_TIMEOUT_MS}ms.\nOutput so far:\n${out}`),
+      );
+    }, CHILD_TIMEOUT_MS);
+
     child.stdout.on('data', (d: Buffer) => (out += d.toString()));
     child.stderr.on('data', (d: Buffer) => (out += d.toString()));
-    child.on('close', (code) => resolve({ code, out }));
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ code, out });
+    });
   });
 }
 

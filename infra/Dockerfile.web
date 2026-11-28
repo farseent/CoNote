@@ -18,6 +18,11 @@ ENV NEXT_OUTPUT=standalone
 # The /api/* rewrite target is resolved at build time (next.config.ts), so it is a build arg.
 ARG API_INTERNAL_URL=http://api:4000
 ENV API_INTERNAL_URL=$API_INTERNAL_URL
+# The public web origin is also resolved at build time: an https:// value turns HSTS on and closes
+# `ws:` in the Content-Security-Policy (apps/web/next.config.ts). Pass the real public origin for
+# every deployment image; the default only suits a local run.
+ARG APP_URL=http://localhost:3000
+ENV APP_URL=$APP_URL
 RUN pnpm --filter @conote/shared run build && pnpm --filter @conote/web run build
 
 FROM node:24-slim AS web

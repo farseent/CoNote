@@ -1,0 +1,190 @@
+# CoNote production stack for ONE server (docs/DEPLOYMENT.md §3, §13, §14).
+#
+#   cp .env.production.example .env.production      # then fill every value; never commit it
+#   docker compose --env-file .env.production -f infra/docker-compose.prod.yml build
+#   docker compose --env-file .env.production -f infra/docker-compose.prod.yml run --rm migrate
+#   docker compose --env-file .env.production -f infra/docker-compose.prod.yml up -d
+#
+# Status: written in Phase 11 and NOT executed (no Docker or server was available when it was
+# written). Run `docker compose ... config` first and record the first real run in DEPLOYMENT.md §16.
+#
+# Only Caddy publishes ports (80, 443). PostgreSQL, Redis, the API, the collaboration server and
+# the web server are reachable only on the private network.
+name: conote-prod
+
+x-node-health: &node-health
+  interval: 15s
+  timeout: 5s
+  retries: 5
+  start_period: 20s
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN}
+      COLLAB_DOMAIN: ${COLLAB_DOMAIN:?set COLLAB_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+      - collab
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: conote
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: conote
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U conote -d conote']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Redis is disposable (D14): no persistence, but a password and a memory cap. `noeviction` makes
+  # Redis refuse writes rather than drop rate-limit counters when the cap is reached.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --save
+      - ''
+      - --appendonly
+      - 'no'
+      - --requirepass
+      - ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - noeviction
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" --no-auth-warning ping | grep -q PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+  # One-off release step: `docker compose ... run --rm migrate`. It applies pending migrations
+  # only (`prisma migrate deploy`); it never resets or drops anything. Run it BEFORE `up -d` of a
+  # new version, and take a backup first (scripts/backup-postgres.sh).
+  migrate:
+    profiles: ['release']
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.node
+      target: migrate
+    environment:
+      DATABASE_URL: postgresql://conote:${POSTGRES_PASSWORD}@postgres:5432/conote
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.node
+      target: api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PORT: '4000'
+      APP_URL: https://${APP_DOMAIN}
+      # The web container reaches the API over the private network, in a private address range.
+      TRUST_PROXY: uniquelocal
+      DATABASE_URL: postgresql://conote:${POSTGRES_PASSWORD}@postgres:5432/conote
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      COLLAB_URL: wss://${COLLAB_DOMAIN}
+      COLLAB_JWT_PRIVATE_KEY: ${COLLAB_JWT_PRIVATE_KEY:?set COLLAB_JWT_PRIVATE_KEY}
+    volumes:
+      - assets:/data/assets
+    healthcheck:
+      <<: *node-health
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4000/ready').then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  collab:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.node
+      target: collab
+    restart: unless-stopped
+    # Longer than COLLAB_SHUTDOWN_TIMEOUT_MS (10 s) so the store flush on SIGTERM can finish.
+    stop_grace_period: 30s
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      COLLAB_PORT: '4100'
+      APP_URL: https://${APP_DOMAIN}
+      DATABASE_URL: postgresql://conote:${POSTGRES_PASSWORD}@postgres:5432/conote
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      COLLAB_JWT_PUBLIC_KEYS: ${COLLAB_JWT_PUBLIC_KEYS:?set COLLAB_JWT_PUBLIC_KEYS}
+      COLLAB_INSTANCE_ID: collab-1
+    healthcheck:
+      <<: *node-health
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4100/health').then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+      args:
+        API_INTERNAL_URL: http://api:4000
+        # Baked into the build (HSTS, CSP): must be the real public origin.
+        APP_URL: https://${APP_DOMAIN}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      APP_URL: https://${APP_DOMAIN}
+      API_INTERNAL_URL: http://api:4000
+    healthcheck:
+      <<: *node-health
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health').then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+  assets:
+  caddy-data:
+  caddy-config:

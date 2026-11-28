@@ -168,7 +168,7 @@ export default tseslint.config(
   },
   // Config and script files
   {
-    files: ['**/*.config.{js,mjs,ts}', 'scripts/**/*.{js,mjs,ts}'],
+    files: ['**/*.config.{js,mjs,ts}', 'scripts/**/*.{js,mjs,ts}', 'apps/collab/scripts/**/*.ts'],
     rules: { 'no-console': 'off' },
   },
 );

@@ -114,6 +114,79 @@ const days = (defaultDays: number) => z.coerce.number().int().min(1).max(365).de
 const nodeEnv = z.enum(['development', 'test', 'production']);
 const logLevel = z.enum(LOG_LEVELS).default('info');
 
+/** Hosts that never leave the machine: plain http/ws is acceptable for them even in production. */
+function isLoopbackHost(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]'
+  );
+}
+
+/**
+ * Transport rules of a production deployment (docs/DEPLOYMENT.md §6, AC-11.5): every public
+ * address must be reached over TLS (`https://`, `wss://`), because the session cookie is `Secure`
+ * and a token or document must never cross the internet in clear text. Loopback addresses are
+ * exempt so that the Docker `apps` profile and local production-mode runs keep working. A public
+ * `APP_URL` together with a loopback `COLLAB_URL` is refused too: browsers would be told to open
+ * a WebSocket to their own machine. Pure; reports variable names and reasons, never values.
+ */
+export function productionTransportIssues(env: {
+  NODE_ENV: string;
+  APP_URL?: string;
+  ORIGINS?: readonly string[];
+  COLLAB_URL?: string;
+}): { path: string; message: string }[] {
+  if (env.NODE_ENV !== 'production') return [];
+  const issues: { path: string; message: string }[] = [];
+  const insecure = (value: string, secureProtocol: string): boolean => {
+    try {
+      const url = new URL(value);
+      return url.protocol !== secureProtocol && !isLoopbackHost(url.hostname);
+    } catch {
+      return false; // other validators report malformed values
+    }
+  };
+  const loopback = (value: string): boolean => {
+    try {
+      return isLoopbackHost(new URL(value).hostname);
+    } catch {
+      return false;
+    }
+  };
+  if (env.APP_URL !== undefined && insecure(env.APP_URL, 'https:'))
+    issues.push({
+      path: 'APP_URL',
+      message: 'must use https:// in production (loopback excepted)',
+    });
+  for (const origin of env.ORIGINS ?? [])
+    if (insecure(origin, 'https:'))
+      issues.push({
+        path: 'ALLOWED_ORIGINS',
+        message: 'every origin must use https:// in production (loopback excepted)',
+      });
+  if (env.COLLAB_URL !== undefined) {
+    if (insecure(env.COLLAB_URL, 'wss:'))
+      issues.push({
+        path: 'COLLAB_URL',
+        message: 'must use wss:// in production (loopback excepted)',
+      });
+    if (env.APP_URL !== undefined && !loopback(env.APP_URL) && loopback(env.COLLAB_URL))
+      issues.push({
+        path: 'COLLAB_URL',
+        message: 'points at this machine while APP_URL is public; set the public wss:// address',
+      });
+  }
+  return issues;
+}
+
+const splitOrigins = (raw: string | undefined): string[] =>
+  (raw ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '');
+
 export const apiEnvSchema = z
   .object({
     NODE_ENV: nodeEnv,
@@ -152,6 +225,15 @@ export const apiEnvSchema = z
     COLLAB_URL: wsUrl.default('ws://localhost:4100'),
     /** Activity-log rows older than this are deleted (U11, D69). Default 365 days. */
     ACTIVITY_LOG_RETENTION_DAYS: z.coerce.number().int().min(7).max(3650).default(365),
+  })
+  .superRefine((env, ctx) => {
+    for (const issue of productionTransportIssues({
+      NODE_ENV: env.NODE_ENV,
+      APP_URL: env.APP_URL,
+      ORIGINS: splitOrigins(env.ALLOWED_ORIGINS),
+      COLLAB_URL: env.COLLAB_URL,
+    }))
+      ctx.addIssue({ code: 'custom', path: [issue.path], message: issue.message });
   })
   .transform((env) => ({
     ...env,
@@ -258,17 +340,34 @@ export const collabEnvSchema = z
     /** Close a connection that sent nothing for this long (heartbeat; clients send pings). */
     COLLAB_CONNECTION_TIMEOUT_MS: positiveInt(60_000, 3_600_000),
   })
+  .superRefine((env, ctx) => {
+    for (const issue of productionTransportIssues({
+      NODE_ENV: env.NODE_ENV,
+      APP_URL: env.APP_URL,
+      ORIGINS: splitOrigins(env.COLLAB_ALLOWED_ORIGINS),
+    }))
+      ctx.addIssue({
+        code: 'custom',
+        path: [issue.path === 'ALLOWED_ORIGINS' ? 'COLLAB_ALLOWED_ORIGINS' : issue.path],
+        message: issue.message,
+      });
+  })
   .transform((env) => ({
     ...env,
     COLLAB_ALLOWED_ORIGINS: parseOriginList(env.COLLAB_ALLOWED_ORIGINS, env.APP_URL),
   }));
 export type CollabEnv = z.infer<typeof collabEnvSchema>;
 
-export const webEnvSchema = z.object({
-  NODE_ENV: nodeEnv,
-  APP_URL: httpOrigin,
-  API_INTERNAL_URL: httpUrl,
-});
+export const webEnvSchema = z
+  .object({
+    NODE_ENV: nodeEnv,
+    APP_URL: httpOrigin,
+    API_INTERNAL_URL: httpUrl,
+  })
+  .superRefine((env, ctx) => {
+    for (const issue of productionTransportIssues({ NODE_ENV: env.NODE_ENV, APP_URL: env.APP_URL }))
+      ctx.addIssue({ code: 'custom', path: [issue.path], message: issue.message });
+  });
 export type WebEnv = z.infer<typeof webEnvSchema>;
 
 /** Migration/Prisma tooling only needs the database URL. */

@@ -1,7 +1,7 @@
 # CoNote – Architecture
 
-**Status:** Phase 1 infrastructure and **Phase 2 authentication (§10)** are implemented and locally verified by the owner. Decisions D41–D47 were accepted by the owner on 2026-11-13. The collaboration architecture, persistence model and the remaining product features remain design-only.
-**Last updated:** 2026-11-21 (Phase 9 Redis scaling as built, §25; verified locally by the owner and D64–D66 accepted). Previously 2026-11-20 (Phase 8 verified locally by the owner and D62 and D63 accepted, §24; Phase 6 added, §23; Phase 6 verified locally and D58–D60 accepted; Phase 7 presence, awareness §6/§18 of WEBSOCKET_PROTOCOL, verified locally by the owner on 2026-11-19 and D61 accepted)
+**Status (Phase 11, 2026-11-26):** all product phases (1–10) are implemented and owner-verified locally; the architecture below describes what was built, with sections 20–25 recording each phase as built. **§26 is the final production deployment view.** It has been rehearsed on one machine; **no real deployment exists** (DEPLOYMENT.md §16). Sections 1–19 keep the original design text; where it differs from the build (object storage, presigned uploads, metrics), the later sections and DEPLOYMENT.md govern.
+**Last updated:** 2026-11-26 (Phase 11 production deployment view, §26). Previously 2026-11-21 (Phase 9 Redis scaling as built, §25; verified locally by the owner and D64–D66 accepted). Previously 2026-11-20 (Phase 8 verified locally by the owner and D62 and D63 accepted, §24; Phase 6 added, §23; Phase 6 verified locally and D58–D60 accepted; Phase 7 presence, awareness §6/§18 of WEBSOCKET_PROTOCOL, verified locally by the owner on 2026-11-19 and D61 accepted)
 
 Decision IDs (`D#`) and unresolved IDs (`U#`) are defined in [DECISIONS.md](DECISIONS.md). Requirement IDs (`FR-*`, `NFR-*`, `PERF-*`) are in [PROJECT_MASTER.md](PROJECT_MASTER.md). Statements marked **(to verify)** are assumptions that the Phase 1 spike or a named phase must confirm before they are relied on (collected in §18).
 
@@ -418,16 +418,16 @@ Exact endpoint shapes and fallback behaviour are specified in API_CONTRACTS.md a
 | Redis | 6379 |
 | MinIO S3 API / console | 9000 / 9001 when added (not in Phase 1 Compose; D37) |
 
-### Production (reference, provider-neutral – U10)
+### Production (reference – D71, proposed)
 
 ```text
-Internet ──► app.<domain>      ──► web ×N ──(private)──► api ×N ──► PostgreSQL
-Internet ──► collab.<domain>   ──► load balancer (WebSocket) ──► collab ×N ──► PostgreSQL
-                                                                   └────────► Redis
-Browser ──► object storage (presigned uploads, image reads)
+Internet ──► app.<domain>     ──► Caddy (TLS) ──► web ──(private)──► api ──► PostgreSQL
+Internet ──► collab.<domain>  ──► Caddy (TLS) ──► collab ──────────────────► PostgreSQL
+                                                    └────────────────────► Redis
+api ──► local volume (uploaded images; one api instance)
 ```
 
-Details are in DEPLOYMENT.md.
+The original design drew object storage with presigned uploads; as built, images pass through the API to local disk (D55) and S3 is not implemented (U7). The full production view is §26. Details are in DEPLOYMENT.md.
 
 ## 16. Failure modes
 
@@ -683,3 +683,76 @@ Status: implemented and tested in a preparation environment (TESTING §8.0e) and
 - **Tested with at most three instances and one core.** No network, no real balancer, no TLS, no real browsers (the owner checklist is in HANDOVER §14).
 - **A channel for an unloaded document may stay subscribed** if Redis was down at unload; it is dropped at the next recovery, and its messages are ignored meanwhile.
 - **Redis eviction and memory limits** were not tested; the channels carry no stored data, but rate-limit keys do (DEPLOYMENT §7).
+
+## 26. Phase 11: production deployment view (2026-11-26)
+
+Status: **designed, packaged and rehearsed on one machine; not deployed** (DEPLOYMENT.md §16). Decisions D71 (hosting) and D72 (production transport rules) are **proposed** and await the owner.
+
+### 26.1 Deployment topology and trust boundaries
+
+```mermaid
+flowchart TB
+  subgraph Internet["Untrusted: the internet"]
+    BR["Browsers"]
+  end
+  subgraph Server["One server (Docker Compose network, private)"]
+    CADDY["Caddy :80 :443<br/>TLS, redirect, X-Forwarded-*"]
+    WEB["web :3000<br/>Next.js, rewrite /api/*"]
+    API["api :4000<br/>Fastify, TRUST_PROXY=uniquelocal"]
+    COLLAB["collab :4100<br/>Hocuspocus, Origin check, JWT"]
+    PG[("PostgreSQL 17<br/>volume postgres-data")]
+    RD[("Redis 7<br/>no persistence, password")]
+    VOL[("volume assets<br/>images")]
+  end
+  BR -->|"https app.domain"| CADDY
+  BR -->|"wss collab.domain"| CADDY
+  CADDY --> WEB
+  CADDY --> COLLAB
+  WEB --> API
+  API --> PG
+  API --> RD
+  API --> VOL
+  COLLAB --> PG
+  COLLAB <--> RD
+```
+
+Only Caddy publishes ports. The API has no public route: every REST call enters through the web origin. The two public origins are different (`app.` and `collab.`), so a collaboration token — not a cookie — authenticates the WebSocket (D7, D22), and the server checks `Origin` against an allow-list (D25).
+
+### 26.2 Opening a page in production
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant C as Caddy
+  participant W as web
+  participant A as api
+  participant S as collab
+  participant P as PostgreSQL
+  B->>C: GET https://app.domain/workspaces/.../pages/...
+  C->>W: page request
+  W-->>B: HTML, JS (CSP, HSTS)
+  B->>C: POST /api/v1/pages/{id}/collab-token (cookie __Host-)
+  C->>W: forward
+  W->>A: rewrite /api/*
+  A->>P: session and page permission
+  A-->>B: token (60 s), collabUrl wss://collab.domain, readOnly flag
+  B->>C: wss://collab.domain (Origin: https://app.domain, token)
+  C->>S: upgrade
+  S->>S: verify token, check Origin
+  S->>P: role from the database, load document
+  S-->>B: sync, presence (identity stamped by the server)
+```
+
+### 26.3 What was verified, and where
+
+| Claim | Evidence | Real deployment |
+|---|---|---|
+| Frontend, API and WebSocket work together over HTTPS and a separate `wss://` origin | `pnpm verify:deployment` 24/24 and 13/13 browser tests on the one-machine rehearsal (DEPLOYMENT §16.B) | Not verified |
+| `__Host-` cookie with `Secure` behind a TLS proxy | verify script, rehearsal | Not verified |
+| Production refuses insecure public URLs | `shared.test.ts` | — |
+| Compose and Caddy configuration | Parsed, validated against the real env schemas and `caddy validate`; **never executed** | Not verified |
+| Client address seen by the API (rate-limit key) through Caddy → Next.js → API | **Not verified** (§6 of DEPLOYMENT, item 6 of §18) | Not verified |
+
+### 26.4 Limits of this topology
+
+One server is a single point of failure; one `api` instance is required while images are on local disk; Redis is disposable by design; there is no metrics endpoint. DEPLOYMENT.md §13, §17 and §18 list the costs, the blockers and the remaining steps.

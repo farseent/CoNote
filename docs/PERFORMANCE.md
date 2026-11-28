@@ -161,3 +161,14 @@ node --env-file=.env --import tsx apps/collab/bench/run.ts <scenario>
 ```
 
 Scenarios: `latency`, `fanout`, `connections`, `persistence`, `recovery-instance`, `recovery-redis`, `sticky`, `reconnect`. API latency: `node --env-file=.env --import tsx apps/api/bench/api-latency.ts` (writes `docs/benchmarks/api-latency.json`). PostgreSQL and Redis must be running; `recovery-redis` stops and starts a local `redis-server` with `redis-cli shutdown nosave` and must not be run against a shared Redis. Each scenario writes `docs/benchmarks/<scenario>.json`. A scenario can take from 1 to 5 minutes. The statement counts in section 6 were taken with `ALTER SYSTEM SET log_statement='all'` (reset afterwards) and are not scripted.
+
+## 9. Phase 11 spot measurement through TLS and a reverse proxy (2026-11-26)
+
+`pnpm measure:deployment` (`apps/collab/scripts/measure-deployment.ts`) measures what a user feels against any running deployment, from the machine that runs it: authenticated `GET /api/v1/auth/session` through the proxy, and the time an edit takes to reach a second connection over the public `wss://` address. 200 samples after warm-up, one run, one account, one document.
+
+| Measurement (rehearsal: Caddy 2.6.2 with a local CA, production builds, Node v24.22.3, PostgreSQL 16, one shared vCPU, **loopback**) | p50 ms | p95 ms | p99 ms | max ms |
+|---|---|---|---|---|
+| REST: authenticated session call through Caddy and the Next.js rewrite | 5.11 | 9.82 | 12.74 | 15.79 |
+| Edit from one connection to another over `wss://` through Caddy | 1.65 | 3.10 | 8.46 | 9.60 |
+
+**Read with care:** there is no network between the client and the server (loopback), the client, proxy, services and databases share one core, it is one run with no repetitions, and PostgreSQL was 16 rather than 17. These are **not deployment performance**; they show that the proxy and TLS add little on top of the Phase 9 figures (§1: sync p50 1.7–1.9 ms in process) and give the owner a ready tool to measure the real path. **Not measured in Phase 11:** any load level, a deployment, real network latency, TLS handshake cost per new connection, memory under the production Compose limits.

@@ -28,6 +28,8 @@
     "test": "pnpm run build:packages && node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run",
     "test:unit": "pnpm run build:packages && node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run --project unit",
     "test:e2e": "pnpm --filter @conote/e2e test",
+    "verify:deployment": "pnpm --filter @conote/collab run verify:deployment",
+    "measure:deployment": "pnpm --filter @conote/collab run measure:deployment",
     "test:integration": "pnpm run build:packages && node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run --project integration",
     "db:generate": "pnpm --filter @conote/db run generate",
     "db:migrate:deploy": "pnpm --filter @conote/db run migrate:deploy",

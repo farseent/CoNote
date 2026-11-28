@@ -1,6 +1,8 @@
 # CoNote – Handover
 
-**Last updated:** 2026-11-25 (**Phase 10 implemented in a preparation environment on 2026-11-22/23 (68 files, 1,143 tests passing there, §15) and owner-verified locally on 2026-11-25 (§15.6): install, build, format check, lint, typecheck and migrate status passed; the full suite passed 1,143 of 1,143 on the second run after one timing-sensitive cluster test failed once; 13 of 13 Chromium browser tests passed against a production-mode stack; D69 and D70 accepted, NFR-MNT-02 accepted as a documented gap. GitHub Actions has not run.** Previously: 2026-11-21 (**Phase 9 implemented and executed in a preparation environment on 2026-11-21 (64 files, 1,117 tests passing there, §14) and owner-verified locally on the same day (§14.9): build, lint, format check and typecheck passed; 1,116 of 1,117 tests passed, the one failure being the message-count test of the "no message loops" group, which fails inside the full file but passes alone; two collaboration instances checked in real browsers, a Redis outage and the stop of one instance survived; D64–D67 accepted.** Previously: 2026-11-20 (**Phase 8 implemented and executed in a preparation environment on 2026-11-19 (61 files, 1077 tests passing there, §13) and owner-verified locally on 2026-11-20 (§13.11): migration deploy and drift check clean, build, lint, format check and typecheck passed, one deterministic test failure traced to a test-ordering bug and fixed, comments and version history checked in two real browsers; D62 and D63 accepted.** **Phase 7 owner-verified locally on 2026-11-19 (§12.11) and D61 accepted; Phase 7 implemented 2026-11-18, see the Phase 7 paragraph below. Phase 6 implemented 2026-11-17, executed in a preparation environment, and verified on the owner's machine on 2026-11-18 (§11.11): install, lint, format check, typecheck, 878 tests and a manual real-browser walkthrough passed; D58–D60 accepted**). Earlier: 2026-11-17 (Phase 6 implemented and executed in a preparation environment only); 2026-11-16 (Phase 5 implemented, executed in a preparation environment and verified on the owner's machine; D57 accepted; Phase 4 accepted by the owner on 2026-11-16 — the older "final acceptance pending" wording below is superseded)))
+**Last updated:** 2026-11-26 (**Phase 11 (production deployment) prepared and rehearsed on one machine; the application is NOT deployed and no real deployment was verified (§16). Full automated suite 69 files / 1,154 tests passed in the preparation environment; D71 and D72 proposed.**) Previously: 2026-11-25 (**Phase 10 implemented in a preparation environment on 2026-11-22/23 (68 files, 1,143 tests passing there, §15) and owner-verified locally on 2026-11-25 (§15.6): install, build, format check, lint, typecheck and migrate status passed; the full suite passed 1,143 of 1,143 on the second run after one timing-sensitive cluster test failed once; 13 of 13 Chromium browser tests passed against a production-mode stack; D69 and D70 accepted, NFR-MNT-02 accepted as a documented gap. GitHub Actions has not run.** Previously: 2026-11-21 (**Phase 9 implemented and executed in a preparation environment on 2026-11-21 (64 files, 1,117 tests passing there, §14) and owner-verified locally on the same day (§14.9): build, lint, format check and typecheck passed; 1,116 of 1,117 tests passed, the one failure being the message-count test of the "no message loops" group, which fails inside the full file but passes alone; two collaboration instances checked in real browsers, a Redis outage and the stop of one instance survived; D64–D67 accepted.** Previously: 2026-11-20 (**Phase 8 implemented and executed in a preparation environment on 2026-11-19 (61 files, 1077 tests passing there, §13) and owner-verified locally on 2026-11-20 (§13.11): migration deploy and drift check clean, build, lint, format check and typecheck passed, one deterministic test failure traced to a test-ordering bug and fixed, comments and version history checked in two real browsers; D62 and D63 accepted.** **Phase 7 owner-verified locally on 2026-11-19 (§12.11) and D61 accepted; Phase 7 implemented 2026-11-18, see the Phase 7 paragraph below. Phase 6 implemented 2026-11-17, executed in a preparation environment, and verified on the owner's machine on 2026-11-18 (§11.11): install, lint, format check, typecheck, 878 tests and a manual real-browser walkthrough passed; D58–D60 accepted**). Earlier: 2026-11-17 (Phase 6 implemented and executed in a preparation environment only); 2026-11-16 (Phase 5 implemented, executed in a preparation environment and verified on the owner's machine; D57 accepted; Phase 4 accepted by the owner on 2026-11-16 — the older "final acceptance pending" wording below is superseded)))
+
+**Phase 11 (2026-11-26):** Deployment and Final Documentation (§16). **Prepared and rehearsed, not deployed.** No server, hosting account, domain or credentials were available to the assistant, and its sandbox could reach only package registries and GitHub, so **no public instance exists and none of the deployment acceptance criteria that need one is met**; the blockers and the owner's steps are in DEPLOYMENT.md §16.A and §18. What was done: production start-up rules (D72, proposed: `https://`/`wss://` required for public URLs), a production Compose stack and Caddy proxy (`infra/docker-compose.prod.yml`, `infra/Caddyfile`, `.env.production.example`; **never built or run**, no Docker was available), two Dockerfile defects fixed (web image lacked `APP_URL`; API image volume not writable), backup and restore-drill scripts (drill executed locally with a negative control), a black-box `pnpm verify:deployment` (24 checks) and `pnpm measure:deployment`, a key-rotation test, a hosting assessment (D71, proposed), DEPLOYMENT.md corrected against the code and finished, and the final documentation set. **Evidence (rehearsal only, PostgreSQL 16, local certificate authority, loopback):** 24/24 verification checks and 13/13 browser tests through HTTPS and a separate `wss://` collaboration origin; full suite 1,154 tests in 69 files passed (TESTING §8.0k). The first deployment is the first real test of the images, the certificates and the proxy chain.
 
 **Phase 10 (2026-11-22/23, owner-verified 2026-11-25):** Testing, Security and Optimization (§15). Implemented in a preparation environment (five defects fixed, 26 tests and 13 browser tests added, 68 files / 1,143 tests passing there) and **verified on the owner's machine on 2026-11-25 (§15.6)**: install, build, format check, lint and typecheck clean; migrate status up to date; full suite 1,143 of 1,143 on the second run (the first run had one failure in a timing-sensitive cluster test, cause not confirmed); 13 of 13 Chromium tests passed. **D69 (365-day activity-log retention) and D70 (web headers and CSP) accepted; NFR-MNT-02 accepted as a documented gap.** Not done: GitHub Actions (including the new `e2e` job), the Docker `apps` profile, Firefox/WebKit, final Phase 10 acceptance.
 
@@ -22,7 +24,9 @@
 
 **Next step (2026-11-19, superseded by the paragraph below):** the owner records final acceptance of Phase 7 (and the earlier open sign-offs, Phases 2–6); decides what happens to the read-only `page_contents` table (D59 leaves dropping it open); runs the Docker `apps` profile and GitHub Actions on the Phase 5–7 changes (the lockfile changes have not run on a clean runner); optionally makes the flaky Phase 6 test wait for its counter (§12.11); then Phase 8 – Comments and Version History.
 
-**Next step (current, 2026-11-25):** the owner commits the Phase 10 files, including the changed `pnpm-lock.yaml`, `.github/workflows/ci.yml` and the new `e2e/` package; runs GitHub Actions once, including the new `e2e` job, and fixes what a clean runner shows; decides whether to make the two timing-sensitive cluster tests robust (`cluster.int.test.ts` message count, Phase 9; `cluster-failure.int.test.ts` periodic repair, Phase 10, §15.6); optionally runs the Docker `apps` profile; records final acceptance of Phase 10 (and the earlier open sign-offs); then Phase 11 (deployment, where F4, TLS, is to be verified). **Superseded next step (2026-11-21):** the owner commits the Phase 9 files (suggested message: `docs/PHASE_9_COMMIT_MESSAGE.txt`), decides whether the message-count test in `apps/collab/test/cluster.int.test.ts` is fixed before Phase 10 (§14.9), and decides on PERFORMANCE §0, that is whether a run on the owner's hardware is wanted before Phase 10 sets targets (§14.9 does not record that decision); Phase 10 follows. **Earlier next step (2026-11-20, still open where not done):** the owner commits the Phase 8 files (the new migration folder `packages/db/prisma/migrations/20261119120000_comments_versions/` and the corrected `apps/collab/test/versions.int.test.ts` must be part of the commit) and runs the full suite once more (1077 of 1077 expected; the known flaky Phase 6 test may still fail under load); records final acceptance of Phase 8 (and the earlier open sign-offs, Phases 2–7); decides what happens to the read-only `page_contents` table (D59 leaves dropping it open); runs the Docker `apps` profile and GitHub Actions on the Phase 5–8 changes (the lockfile changes have not run on a clean runner); then Phase 9 – Redis Scaling and Performance.
+**Next step (current, 2026-11-26):** the owner (1) reviews and commits the Phase 11 files (list in §16.2; use `docs/PHASE_11_COMMIT_MESSAGE.txt`), runs GitHub Actions once (Phases 10 and 11 have not run there), (2) accepts or changes D71 and D72, (3) provisions a server and a domain and follows DEPLOYMENT.md §14 and §15, filling in §16.A, (4) schedules and tests backups, (5) records final acceptance of the phases still open. **Stop after Phase 11, as instructed: there is no Phase 12.**
+
+**Next step (2026-11-25, superseded by the paragraph above):** the owner commits the Phase 10 files, including the changed `pnpm-lock.yaml`, `.github/workflows/ci.yml` and the new `e2e/` package; runs GitHub Actions once, including the new `e2e` job, and fixes what a clean runner shows; decides whether to make the two timing-sensitive cluster tests robust (`cluster.int.test.ts` message count, Phase 9; `cluster-failure.int.test.ts` periodic repair, Phase 10, §15.6); optionally runs the Docker `apps` profile; records final acceptance of Phase 10 (and the earlier open sign-offs); then Phase 11 (deployment, where F4, TLS, is to be verified). **Superseded next step (2026-11-21):** the owner commits the Phase 9 files (suggested message: `docs/PHASE_9_COMMIT_MESSAGE.txt`), decides whether the message-count test in `apps/collab/test/cluster.int.test.ts` is fixed before Phase 10 (§14.9), and decides on PERFORMANCE §0, that is whether a run on the owner's hardware is wanted before Phase 10 sets targets (§14.9 does not record that decision); Phase 10 follows. **Earlier next step (2026-11-20, still open where not done):** the owner commits the Phase 8 files (the new migration folder `packages/db/prisma/migrations/20261119120000_comments_versions/` and the corrected `apps/collab/test/versions.int.test.ts` must be part of the commit) and runs the full suite once more (1077 of 1077 expected; the known flaky Phase 6 test may still fail under load); records final acceptance of Phase 8 (and the earlier open sign-offs, Phases 2–7); decides what happens to the read-only `page_contents` table (D59 leaves dropping it open); runs the Docker `apps` profile and GitHub Actions on the Phase 5–8 changes (the lockfile changes have not run on a clean runner); then Phase 9 – Redis Scaling and Performance.
 
 Read `CLAUDE.md` first. This file is the source of truth for current project status.
 
@@ -59,8 +63,9 @@ Read `CLAUDE.md` first. This file is the source of truth for current project sta
 | Phase 7 | **Implemented 2026-11-18; owner-verified locally 2026-11-19.** `pnpm install`, `pnpm build:packages`, lint, format check and typecheck pass; the full test run reached 55 files and 965 of 966 tests (`--testTimeout=30000`, 257.73 s), the single failure being a Phase 6 persistence test in `apps/collab/test/sync.int.test.ts` that is flaky under load (passed 4 of 4 times alone); API, collab and web started and login worked; the owner checklist (§12.7 items 2–7) was checked in real browsers and reported working. D61 accepted 2026-11-19. **Not done:** final owner acceptance, Docker, CI, long idle runs, automated browser E2E. See §12 and §12.11. |
 
 | Phase 8 | **Implemented 2026-11-19; owner-verified locally 2026-11-20.** `migrate deploy`, `migrate status` and the scratch-database drift check are clean; build, lint, format check and typecheck pass; the full test run reached 61 files and 1076 of 1077 tests (`--testTimeout=30000`, 265.11 s), the single failure being a test-ordering bug in `apps/collab/test/versions.int.test.ts` (it failed every time, alone as well); the test was corrected and the file passes 27 of 27, the full suite was not rerun; the owner checklist (§13.7) was checked in two real browsers and reported working. D62 and D63 accepted 2026-11-20. **Not done:** a full-suite rerun after the fix, final owner acceptance, Docker, CI, two collab instances in real browsers (Phase 9), automated browser E2E. See §13 and §13.11. |
-| Phase 9 | **Implemented 2026-11-21 in a preparation environment; not owner-verified.** Cross-instance synchronization, U13 recovery, replicated stores, heartbeat and per-instance limits, benchmarks and 40 new tests (§14). New settings `COLLAB_CLUSTER_*`, `COLLAB_INSTANCE_ID`, `COLLAB_REDIS_PREFIX`, `COLLAB_CONNECTION_TIMEOUT_MS`. **No database migration.** New dependency: `@hocuspocus/extension-redis` 4.8.0 (exact pin). |
+| Phase 9 | **Implemented 2026-11-21 in a preparation environment; owner-verified locally the same day (§14.9).** Cross-instance synchronization, U13 recovery, replicated stores, heartbeat and per-instance limits, benchmarks and 40 new tests (§14). New settings `COLLAB_CLUSTER_*`, `COLLAB_INSTANCE_ID`, `COLLAB_REDIS_PREFIX`, `COLLAB_CONNECTION_TIMEOUT_MS`. **No database migration.** New dependency: `@hocuspocus/extension-redis` 4.8.0 (exact pin). |
 | Phase 10 | **Implemented 2026-11-22/23 in a preparation environment; owner-verified locally 2026-11-25.** Install, build, `format:check`, lint and typecheck passed; `migrate:status` up to date (no migration in this phase); full test run 68 files, first run 1,142 of 1,143 (`cluster-failure.int.test.ts`, periodic repair counter, cause not confirmed), second run (`pnpm check`) 1,143 of 1,143; 13 of 13 Playwright tests in Chromium against a production-mode stack. D69 and D70 accepted 2026-11-25; NFR-MNT-02 accepted as a documented gap. **Not done:** GitHub Actions including the `e2e` job, Docker `apps` profile, Firefox/WebKit, final owner acceptance. See §15 and §15.6. |
+| Phase 11 | **Prepared and rehearsed 2026-11-26; NOT deployed.** Production Compose/Caddy configuration, D72 start-up rules, verification and measurement scripts, backup and restore drill, hosting assessment (D71), documentation finished. Rehearsal on one machine: 24/24 black-box checks, 13/13 browser tests, 1,154 tests in 69 files passing, restore drill passed with a negative control. **No real deployment, no Docker build, no certificate issuance, no `migrate deploy` in this phase.** Not owner-verified (§16). |
 
 ### Decisions and open items
 
@@ -1527,3 +1532,136 @@ Environment: Windows (Git Bash), PostgreSQL 17 and Redis 7 from Compose, pnpm 12
 **Decisions (2026-11-25):** D69 accepted with 365 days; D70 accepted; NFR-MNT-02 accepted as a documented gap (a process requirement with no test).
 
 **Still open:** GitHub Actions on a clean runner, including the new `e2e` job; the Docker `apps` profile; Firefox, WebKit and screen readers; the nonce-based CSP (F3, optional); TLS (F4, Phase 11); Phase 9 PERF figures not re-measured; final acceptance of Phase 10.
+
+## 16. Phase 11 – Production deployment and final documentation (2026-11-26)
+
+### 16.1 Outcome in one paragraph
+
+Phase 11 asked for a deployed, verified application. **That was not achieved and is not claimed**: the assistant had no server, hosting account, domain or credentials, no Docker, and a network limited to package registries and GitHub (DEPLOYMENT.md §16.A). What was achieved instead is everything that can be prepared and tested without a deployment: a reviewed production configuration, start-up safeguards, a deployment runbook, an automated production-verification script that the owner can point at the real URL, backup and restore tooling, a hosting assessment with costs, the finished documentation set, and a rehearsal of the production topology (HTTPS, separate `wss://` origin, `__Host-` cookies) on one machine where the verification script passed 24 of 24 checks and the 13 browser tests passed. The acceptance criteria are therefore **met on the rehearsal and unmet for a real deployment**; the table in §16.3 says which is which.
+
+### 16.2 Files changed in Phase 11
+
+```text
+.gitignore                                  # re-includes .env.production.example
+.env.production.example                     # NEW – placeholders only
+README.md                                   # rewritten for the final state
+eslint.config.mjs                           # console allowed in apps/collab/scripts (CLI tools)
+package.json                                # + verify:deployment, measure:deployment
+apps/collab/package.json                    # + verify:deployment, measure:deployment
+apps/collab/tsconfig.json                   # typechecks scripts/
+apps/collab/scripts/verify-deployment.ts    # NEW – 24-check black-box verification
+apps/collab/scripts/measure-deployment.ts   # NEW – REST and sync latency from the caller
+apps/collab/src/token-rotation.test.ts      # NEW – 5 tests (AC-11.6)
+e2e/playwright.config.ts                    # + E2E_IGNORE_HTTPS_ERRORS (local CA only)
+infra/Caddyfile                             # NEW
+infra/docker-compose.prod.yml               # NEW – not executed
+infra/Dockerfile.node                       # API image: writable /data/assets
+infra/Dockerfile.web                        # + APP_URL build argument
+packages/shared/src/env.ts                  # + productionTransportIssues (D72)
+packages/shared/src/shared.test.ts          # + 6 tests
+packages/db/test/workspace-constraints.int.test.ts   # whitespace only (Prettier)
+scripts/backup-postgres.sh                  # NEW
+scripts/restore-drill.sh                    # NEW
+docs/DEPLOYMENT.md                          # corrected against the code, finished
+docs/ARCHITECTURE.md                        # status, §15 block, new §26 with diagrams
+docs/DATABASE_SCHEMA.md                     # status header (final)
+docs/API_CONTRACTS.md                       # status header (final)
+docs/WEBSOCKET_PROTOCOL.md                  # status header (final)
+docs/TESTING.md                             # status, new §8.0k (Phase 11 report)
+docs/PERFORMANCE.md                         # new §9
+docs/DECISIONS.md                           # D71, D72 (proposed), U10
+docs/DEMO.md                                # NEW – demo recording instructions
+docs/HANDOVER.md                            # this file
+docs/PHASE_11_COMMIT_MESSAGE.txt            # NEW
+```
+
+No migration, no REST endpoint, no WebSocket message and no dependency changed, so `pnpm install` is not needed after copying the files; run `pnpm build:packages` once (the shared package changed).
+
+### 16.3 Final acceptance criteria
+
+| Criterion | Status |
+|---|---|
+| Application is successfully deployed **or deployment blockers are documented** | **Not deployed. Blockers documented** (DEPLOYMENT §16.A, §18) |
+| Frontend and backend communicate correctly | Verified on the rehearsal (HTTPS, rewrite, cookies); **not on a real deployment** |
+| WebSocket connections work in production | Verified over `wss://` on a separate origin on the rehearsal; **not in production** |
+| Multiple users can collaborate | Verified on the rehearsal (verify script, browser test, integration tests) |
+| Document changes persist | Verified on the rehearsal (fresh connection loads the stored document; restore drill compares all document tables) |
+| Security and permissions work | Verified on the rehearsal (viewer cannot write over REST or WebSocket, foreign origin and forged token refused, cookie attributes, headers, logs scanned) |
+| README and technical documentation complete | Done (§16.5) |
+| Demo instructions available | Done (`docs/DEMO.md`) |
+
+### 16.4 Production deployment information
+
+| Item | Value |
+|---|---|
+| Public URL | **None** |
+| Hosting | Proposed in D71 (one server, Docker Compose, Caddy); nothing provisioned |
+| Cost if adopted | Roughly €5–8 a month for the server (third-party 2026 sources, confirm) plus a domain; certificates free; no free tier found that fits (DEPLOYMENT §13, §17) |
+| Configuration | `.env.production.example`, DEPLOYMENT §4; secrets only in `.env.production` on the server |
+| Migrations | `docker compose … run --rm migrate` (`prisma migrate deploy`, non-destructive); **never run a destructive migration against production without explicit approval** |
+| Verification | `pnpm verify:deployment` and `pnpm test:e2e` against the URL; manual checks in DEPLOYMENT §15 C |
+| Results to record | DEPLOYMENT §16.A (currently blank on purpose) |
+
+### 16.5 Documentation review (final set)
+
+| Document | State |
+|---|---|
+| README.md | Rewritten: status, features, stack, diagram, layout, install, production, roadmap |
+| DEPLOYMENT.md | Corrected: removed variables that do not exist, added real ones, hosting decision, runbooks, verification, execution record, costs, blockers |
+| ARCHITECTURE.md | Status updated; stale production sketch (presigned object storage) replaced; §26 production view and diagrams |
+| DATABASE_SCHEMA.md | Checked: 15 tables and 15 models all documented; status header final |
+| API_CONTRACTS.md | Checked: all 53 live endpoint IDs found in route sources; status header final |
+| WEBSOCKET_PROTOCOL.md | Checked: all six application message types documented; status header final |
+| TESTING.md | §8.0k testing report; status |
+| PERFORMANCE.md | §9 spot measurement; the Phase 9 caveats remain |
+| DECISIONS.md | D71, D72, U10 |
+| HANDOVER.md | This section |
+| Architecture diagram | README (overview) and ARCHITECTURE §26 (topology, trust boundaries, page-open sequence); the older diagrams in ARCHITECTURE remain |
+
+Older text in HANDOVER, ARCHITECTURE and DECISIONS keeps its historical status notes; where it conflicts with this section, **this section and DEPLOYMENT.md govern**. Known stale remnants that were deliberately left as history: the per-phase "Current phase" paragraphs at the top of this file.
+
+### 16.6 Known limitations (consolidated)
+
+**Deployment and operations**
+
+1. **Not deployed, not verified in production.** The Docker images and the production Compose file have never been built or run; Let's Encrypt issuance, DNS, `TRUST_PROXY=uniquelocal` in Docker and PostgreSQL 17 under Phase 11 are untested.
+2. Single server: no high availability, no zero-downtime deploys, no failover; a lost server means a rebuild from backups (not rehearsed).
+3. One `api` instance only while images live on local disk (D55); the S3 adapter does not exist (U7).
+4. **No metrics, dashboards or alerts**; only logs and health endpoints (DEPLOYMENT §10).
+5. Backups are a script, not a schedule; dumps are logical (daily recovery point at best), not encrypted by the script, not copied off-server, and do not include the images volume; no point-in-time recovery.
+6. The migration job and the application share one database role; image tags are not pinned to digests; no CI image build, scan or deployment.
+7. No per-IP connection-rate limit at the edge; per-user connection limits are per instance, not global.
+
+**Product**
+
+8. No e-mail: invitations are links; no e-mail verification or password reset; no avatar upload.
+9. Comments cannot be edited and there are no notifications.
+10. No offline-first editing: a reconnecting client recovers its edits, but changes not yet stored survive only in still-connected clients if the server crashes (guarantee G3); zero data loss is not claimed.
+11. `PAGE-02` returns the whole accessible tree unpaginated; no index on the activity log's `createdAt` alone (D69).
+12. The page CSP allows inline scripts because of Next.js (D70); a nonce-based CSP is not implemented.
+13. After a Redis outage, edits and cursors do not cross instances until Redis returns; each instance keeps serving its own clients and recovers by itself (D64).
+14. Adding collab instances adds connection capacity, not per-document capacity; sticky routing is not implemented (D67).
+15. The interim `page_contents` table is kept as a read-only seed source (D59).
+16. Cosmetic: account-scoped rate-limit keys read `undefinedundefined-…` in Redis (TESTING §8.0k F11-8).
+
+**Testing and evidence**
+
+17. Benchmarks are from one shared vCPU, in process, without a network or TLS; they are not capacity figures (PERFORMANCE §0). The Phase 11 spot measurement is loopback.
+18. Only Chromium is tested; Firefox and WebKit are not. GitHub Actions has not run on Phase 10 and 11 changes. NFR-MNT-02 is an accepted documented gap.
+19. No licence is chosen (U12).
+
+### 16.7 Suggested future improvements (not planned work)
+
+In rough order of value: **(1)** deploy, run the verification, record §16.A; **(2)** schedule, encrypt and off-site backups; add PITR and rehearse a full recovery; **(3)** metrics and alerts (connections, store failures, persistence lag, certificate and disk); **(4)** an S3-compatible storage adapter and then several API instances; **(5)** CI that builds, scans and publishes images by commit SHA and deploys; **(6)** separate database roles and digest-pinned images; **(7)** e-mail provider for invitations, verification and password reset; **(8)** comment editing and notifications, avatar upload; **(9)** nonce-based CSP; **(10)** global per-user limits through Redis and edge rate limiting; **(11)** sticky routing by document for hot documents; **(12)** pagination of the page tree; **(13)** Firefox and WebKit browser tests; **(14)** a staging environment on a second server; **(15)** managed hosting with high availability once usage justifies the cost; **(16)** choose a licence.
+
+### 16.8 Demo
+
+`docs/DEMO.md` explains how to run the application locally, what to show in what order, and how to record it. A demonstration of a public instance is not possible until a deployment exists.
+
+### 16.9 Open decisions after Phase 11
+
+D71 and D72 (proposed); U6 (e-mail provider, not needed for the reference stack), U7 (S3 adapter), U12 (licence); the earlier open sign-offs listed above.
+
+### 16.10 What the assistant did not do, on purpose
+
+It did not deploy, did not create accounts or servers, did not write any secret into a file, did not run any destructive migration, and did not run the Compose file or the images because it could not. It did not state a deployment result it had not observed.
